@@ -1,30 +1,43 @@
 <h1 align="center">BMC Remedy RAG Agent</h1>
 
 <p align="center">
-  <b>🤖 On-premise Retrieval-Augmented Generation agent for BMC Remedy ITSM</b>
+  <b>🤖 Local LLM-Powered RAG Agent for BMC Remedy ITSM</b>
+  <br>
+  <b>🏠 100% Air-Gapped • 🔒 Fully On-Premise • 🚀 No Cloud Dependencies</b>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
+  <a href="#local-llm-setup">Local LLM Setup</a> •
   <a href="#architecture">Architecture</a> •
-  <a href="#api-endpoints">API</a> •
   <a href="#deployment">Deployment</a>
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Local%20LLM-Ollama-blue?logo=ollama&logoColor=white" alt="Ollama"/>
   <img src="https://img.shields.io/badge/Java-17+-orange?logo=java&logoColor=white" alt="Java"/>
   <img src="https://img.shields.io/badge/Spring%20Boot-3.2.0-green?logo=springboot&logoColor=white" alt="Spring Boot"/>
   <img src="https://img.shields.io/badge/LangChain4j-0.35.0-blue?logo=java&logoColor=white" alt="LangChain4j"/>
   <img src="https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql&logoColor=white" alt="PostgreSQL"/>
   <img src="https://img.shields.io/badge/pgvector-0.1.4-purple?logo=postgresql&logoColor=white" alt="pgvector"/>
   <img src="https://img.shields.io/badge/React-19+-cyan?logo=react&logoColor=white" alt="React"/>
-  <img src="https://img.shields.io/badge/RAG-✓-brightgreen" alt="RAG"/>
-  <img src="https://img.shields.io/badge/ITSM-✓-blue" alt="ITSM"/>
+  <img src="https://img.shields.io/badge/Air--Gapped-✓-brightgreen" alt="Air-Gapped"/>
+  <img src="https://img.shields.io/badge/On--Premise-✓-blue" alt="On-Premise"/>
 </p>
 
 <p align="center">
-  <i>Enterprise-grade AI for IT support workflows</i>
+  <i>Run your own private AI assistant for IT support — completely offline</i>
 </p>
+
+## ⭐ Key Highlight: Local LLM with Ollama
+
+**This project is designed to run entirely with local LLMs using Ollama — no external API required.**
+
+- 🏠 **100% Offline**: Run Llama 3, Mistral, or other models locally on your hardware
+- 🔒 **Data Privacy**: Your ITSM data never leaves your infrastructure
+- 💰 **No API Costs**: Unlimited queries without per-token charges
+- 🎯 **Flexible Models**: Switch between Llama 3 8B, Mistral 7B, or any Ollama-supported model
+- 🚀 **Easy Setup**: One command to install Ollama and pull your preferred model
 
 ## Overview
 
@@ -32,13 +45,16 @@ This is an enterprise-grade, air-gapped RAG agent that extracts ITSM data from B
 
 ### Key Features
 
+- **🎯 PRIMARY: Local LLM with Ollama**: Run Llama 3, Mistral, or any Ollama model completely offline — no API keys, no costs, no data leaving your infrastructure
+- **🏠 Air-Gapped Architecture**: Designed for isolated environments with zero external dependencies
+- **Local Embeddings**: ONNX-based `all-minilm-l6-v2` model (384-dimensional vectors) runs entirely on your hardware
 - **Native BMC Remedy Integration**: Uses the Java AR API (not REST) for direct RPC communication with Remedy servers
-- **Local Embeddings**: ONNX-based `all-minilm-l6-v2` model (384-dimensional vectors) runs locally
-- **Flexible LLM Backend**: Supports Z.AI cloud API (default) with optional Ollama for local inference
 - **Vector Storage**: PostgreSQL with pgvector extension for efficient similarity search
 - **Incremental Sync**: CDC-based synchronization using Remedy's `Last Modified Date` field
 - **ReBAC Security**: Relationship-Based Access Control filtering at the vector level
 - **Modern Web UI**: React 19 + TypeScript frontend with WebSocket streaming
+
+> **💡 Why Local LLM?** Enterprise ITSM data contains sensitive information. With local Ollama integration, your incident tickets, resolutions, and work logs never leave your network. You get AI-powered assistance without sacrificing data sovereignty.
 
 ## Architecture
 
@@ -113,7 +129,10 @@ This is an enterprise-grade, air-gapped RAG agent that extracts ITSM data from B
 - **PostgreSQL 16** with pgvector extension
 - **Node.js 20+** (for frontend development)
 - **BMC AR System 9.x - 20.x** with Java API access
-- **Z.AI API Key** (or Ollama for local LLM)
+- **Ollama** (for local LLM) — **RECOMMENDED** for air-gapped deployments
+  - Install: `curl -fsSL https://ollama.com/install.sh | sh`
+  - Or download from https://ollama.com/download
+- **Optional**: Z.AI API Key (if you prefer cloud LLM instead of local)
 
 ## Quick Start
 
@@ -153,10 +172,14 @@ POSTGRES_DB=bmc_rag
 POSTGRES_USER=raguser
 POSTGRES_PASSWORD=your_password
 
-# Z.AI LLM (or configure Ollama for local inference)
-ZAI_API_KEY=your_zai_api_key
-ZAI_BASE_URL=https://api.z.ai/api/paas/v4/
-ZAI_MODEL=glm-4.7
+# Local LLM (Ollama) — RECOMMENDED for air-gapped deployments
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3:8b
+
+# OR use Cloud LLM (Z.AI) — Only if you need external LLM
+# ZAI_API_KEY=your_zai_api_key
+# ZAI_BASE_URL=https://api.z.ai/api/paas/v4/
+# ZAI_MODEL=glm-4.7
 
 # BMC Remedy Connection
 REMEDY_SERVER=remedy.example.com
@@ -194,6 +217,135 @@ npm run dev
 - **API**: http://localhost:8080
 - **Web UI**: http://localhost:5173
 - **Health Check**: http://localhost:8080/api/v1/health
+
+## 🏠 Local LLM Setup with Ollama
+
+This project is designed to work with **local LLMs via Ollama** as the primary inference engine.
+
+### Why Ollama?
+
+- **Zero network calls**: Everything runs locally
+- **No API costs**: Pay once in hardware, query forever
+- **Data sovereignty**: Your ITSM data never leaves your infrastructure
+- **Model flexibility**: Switch between Llama, Mistral, Gemma, and more
+- **Simple deployment**: One binary, no dependencies
+
+### Installing Ollama
+
+**Linux / macOS:**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**Windows:**
+Download from https://ollama.com/download
+
+**Docker:**
+```bash
+docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+```
+
+### Pulling a Model
+
+```bash
+# Llama 3 8B (Recommended - 4.7GB)
+ollama pull llama3:8b
+
+# Llama 3 70B (More capable - 40GB)
+ollama pull llama3:70b
+
+# Mistral 7B (Good balance - 4.1GB)
+ollama pull mistral:7b
+
+# Gemma 2 9B (Google's model - 5.5GB)
+ollama pull gemma2:9b
+
+# List all available models
+ollama list
+```
+
+### Configuring the Application
+
+**Option A: Environment Variables (.env)**
+```bash
+# Local Ollama (Recommended)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3:8b
+
+# Disable cloud LLM
+# ZAI_API_KEY=
+```
+
+**Option B: Docker Compose**
+Uncomment the Ollama service in `docker/docker-compose.yml`:
+
+```yaml
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+```
+
+Then set:
+```bash
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=llama3:8b
+```
+
+### Testing Your Local LLM
+
+```bash
+# Test Ollama directly
+curl http://localhost:11434/api/generate -d '{
+  "model": "llama3:8b",
+  "prompt": "Why is PostgreSQL used with RAG applications?"
+}'
+
+# Test via the application
+curl http://localhost:8080/api/v1/health -H "Accept: application/json"
+```
+
+### Hardware Requirements
+
+| Model | VRAM | RAM | Recommended Use |
+|-------|------|-----|-----------------|
+| Llama 3 8B | 8GB | 16GB | Development, testing |
+| Llama 3 70B | 40GB | 64GB | Production, complex queries |
+| Mistral 7B | 8GB | 16GB | Balanced performance |
+| Gemma 2 9B | 10GB | 20GB | Alternative to Llama 3 8B |
+
+> **💡 Tip:** For production deployments, consider GPU acceleration with NVIDIA GPUs (RTX 3060 or higher recommended).
+
+### Switching Models
+
+```bash
+# Pull a new model
+ollama pull mistral:7b
+
+# Update .env
+OLLAMA_MODEL=mistral:7b
+
+# Restart the application
+docker-compose restart rag-agent
+```
+
+### Cloud LLM Fallback (Optional)
+
+If you need to use a cloud LLM instead:
+
+```bash
+# Comment out Ollama settings
+# OLLAMA_BASE_URL=http://localhost:11434
+# OLLAMA_MODEL=llama3:8b
+
+# Enable Z.AI
+ZAI_API_KEY=your_api_key
+ZAI_BASE_URL=https://api.z.ai/api/paas/v4/
+ZAI_MODEL=glm-4.7
+```
 
 ## API Endpoints
 
