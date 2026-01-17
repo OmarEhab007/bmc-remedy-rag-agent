@@ -180,12 +180,19 @@ public class WebSocketChatController {
                 @Override
                 public void onError(Throwable error) {
                     log.error("Streaming error for message {}: {}", message.getMessageId(), error.getMessage());
+
+                    // Provide a user-friendly error message instead of technical details
+                    String userFriendlyError = "I apologize, but I encountered a temporary issue. Please try again.";
+
+                    // Send the completion with the error - the service should have already
+                    // sent a fallback response token, so we just mark as complete
                     sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
                         .messageId(message.getMessageId())
                         .sessionId(sessionId)
-                        .type(ChunkType.ERROR)
-                        .error("An error occurred: " + error.getMessage())
+                        .type(ChunkType.COMPLETE)
                         .isComplete(true)
+                        .citations(Collections.emptyList())
+                        .confidenceScore(0.0)
                         .build());
                 }
             }

@@ -108,8 +108,10 @@ public class RagAssistantService {
             log.debug("LLM response generated: {} chars", response.length());
         } catch (Exception e) {
             log.error("LLM call failed: {}", e.getMessage(), e);
-            response = "I apologize, but I encountered an error while processing your request. " +
-                      "Please try again or rephrase your question.";
+            // Provide bilingual error message based on query language
+            response = isArabicQuery(question)
+                ? "عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى أو إعادة صياغة سؤالك."
+                : "I apologize, but I encountered an error while processing your request. Please try again or rephrase your question.";
         }
 
         // Update memory with the conversation
@@ -269,21 +271,54 @@ public class RagAssistantService {
 
             @Override
             public void onComplete(Response<AiMessage> response) {
-                // Update memory with the conversation
-                memory.add(UserMessage.from(question));
-                memory.add(AiMessage.from(fullResponse.toString()));
+                try {
+                    // Update memory with the conversation
+                    String responseText = fullResponse.toString();
+                    if (responseText.isEmpty()) {
+                        // Handle empty response case with bilingual message
+                        responseText = getBilingualErrorMessage(question, !retrievalResult.isEmpty());
+                        tokenConsumer.accept(responseText);
+                    }
 
-                // Calculate confidence based on context availability
-                double confidence = retrievalResult.isEmpty() ? 0.5 : 0.85;
+                    memory.add(UserMessage.from(question));
+                    memory.add(AiMessage.from(responseText));
 
-                // Call completion handler
-                completionConsumer.onComplete(sources, confidence);
-                latch.countDown();
+                    // Calculate confidence based on context availability
+                    double confidence = retrievalResult.isEmpty() ? 0.5 : 0.85;
+
+                    // Call completion handler
+                    completionConsumer.onComplete(sources, confidence);
+                } catch (Exception e) {
+                    log.error("Error in onComplete handler: {}", e.getMessage(), e);
+                    completionConsumer.onError(e);
+                } finally {
+                    latch.countDown();
+                }
             }
 
             @Override
             public void onError(Throwable error) {
                 log.error("Streaming error: {}", error.getMessage(), error);
+
+                // Provide a fallback response if we have partial content
+                String responseText = fullResponse.toString();
+                if (responseText.isEmpty()) {
+                    // Send a bilingual user-friendly error message
+                    String errorMessage = isArabicQuery(question)
+                        ? "عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى."
+                        : "I apologize, but I encountered an error while processing your request. Please try again.";
+                    tokenConsumer.accept(errorMessage);
+                    responseText = errorMessage;
+                }
+
+                // Still save to memory for context continuity
+                try {
+                    memory.add(UserMessage.from(question));
+                    memory.add(AiMessage.from(responseText));
+                } catch (Exception e) {
+                    log.warn("Failed to save conversation to memory: {}", e.getMessage());
+                }
+
                 completionConsumer.onError(error);
                 latch.countDown();
             }
@@ -399,6 +434,35 @@ public class RagAssistantService {
         result.put("evictionCount", stats.evictionCount());
         result.put("estimatedSize", sessionMemories.estimatedSize());
         return result;
+    }
+
+    /**
+     * Check if the query contains Arabic characters.
+     */
+    private boolean isArabicQuery(String text) {
+        if (text == null || text.isEmpty()) return false;
+        // Check for Arabic Unicode range (0x0600-0x06FF)
+        for (char c : text.toCharArray()) {
+            if (c >= 0x0600 && c <= 0x06FF) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get bilingual error message based on query language.
+     */
+    private String getBilingualErrorMessage(String question, boolean hasContext) {
+        if (isArabicQuery(question)) {
+            return hasContext
+                ? "عذراً، لم أتمكن من إنشاء رد. يرجى المحاولة مرة أخرى."
+                : "لم أجد معلومات ذات صلة في قاعدة المعرفة.";
+        } else {
+            return hasContext
+                ? "I apologize, but I couldn't generate a response. Please try again."
+                : "No relevant information found in the knowledge base.";
+        }
     }
 
     /**

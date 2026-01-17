@@ -1,9 +1,7 @@
 <h1 align="center">BMC Remedy RAG Agent</h1>
 
 <p align="center">
-  <b>🤖 Local LLM-Powered RAG Agent for BMC Remedy ITSM</b>
-  <br>
-  <b>🏠 100% Air-Gapped • 🔒 Fully On-Premise • 🚀 No Cloud Dependencies</b>
+  <b> Local LLM-Powered RAG Agent for BMC Remedy ITSM</b>
 </p>
 
 <p align="center">
@@ -29,24 +27,14 @@
   <i>Run your own private AI assistant for IT support — completely offline</i>
 </p>
 
-## ⭐ Key Highlight: Local LLM with Ollama
-
-**This project is designed to run entirely with local LLMs using Ollama — no external API required.**
-
-- 🏠 **100% Offline**: Run Llama 3, Mistral, or other models locally on your hardware
-- 🔒 **Data Privacy**: Your ITSM data never leaves your infrastructure
-- 💰 **No API Costs**: Unlimited queries without per-token charges
-- 🎯 **Flexible Models**: Switch between Llama 3 8B, Mistral 7B, or any Ollama-supported model
-- 🚀 **Easy Setup**: One command to install Ollama and pull your preferred model
-
 ## Overview
 
 This is an enterprise-grade, air-gapped RAG agent that extracts ITSM data from BMC Remedy AR System (versions 9.x through 20.x), vectorizes it using local embeddings, and enables semantic search with AI-powered responses. The system is designed for on-premise deployment with no external cloud dependencies.
 
 ### Key Features
 
-- **🎯 PRIMARY: Local LLM with Ollama**: Run Llama 3, Mistral, or any Ollama model completely offline — no API keys, no costs, no data leaving your infrastructure
-- **🏠 Air-Gapped Architecture**: Designed for isolated environments with zero external dependencies
+- **PRIMARY: Local LLM with Ollama**: Run Llama 3, Mistral, or any Ollama model completely offline — no API keys, no costs, no data leaving your infrastructure
+- **Air-Gapped Architecture**: Designed for isolated environments with zero external dependencies
 - **Local Embeddings**: ONNX-based `all-minilm-l6-v2` model (384-dimensional vectors) runs entirely on your hardware
 - **Native BMC Remedy Integration**: Uses the Java AR API (not REST) for direct RPC communication with Remedy servers
 - **Vector Storage**: PostgreSQL with pgvector extension for efficient similarity search
@@ -54,7 +42,7 @@ This is an enterprise-grade, air-gapped RAG agent that extracts ITSM data from B
 - **ReBAC Security**: Relationship-Based Access Control filtering at the vector level
 - **Modern Web UI**: React 19 + TypeScript frontend with WebSocket streaming
 
-> **💡 Why Local LLM?** Enterprise ITSM data contains sensitive information. With local Ollama integration, your incident tickets, resolutions, and work logs never leave your network. You get AI-powered assistance without sacrificing data sovereignty.
+> **Why Local LLM?** Enterprise ITSM data contains sensitive information. With local Ollama integration, your incident tickets, resolutions, and work logs never leave your network. You get AI-powered assistance without sacrificing data sovereignty.
 
 ## Architecture
 

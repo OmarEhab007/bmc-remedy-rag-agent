@@ -1691,12 +1691,26 @@ a:focus-visible {
 }
 
 /* Fix header buttons - ensure icons are centered */
-.header-minimal button {
+.header-minimal button:not(.md\:hidden) {
   min-width: var(--touch-target-min);
   min-height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Mobile menu button - respect md:hidden but center when visible */
+.header-minimal button.md\:hidden {
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .header-minimal button.md\:hidden {
+    display: flex;
+  }
 }
 
 /* Fix theme toggle */
