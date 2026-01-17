@@ -1,0 +1,141 @@
+# BMC Remedy RAG Agent - Docker Compose Configuration
+# On-premise deployment with PostgreSQL (pgvector) and Z.AI cloud LLM
+
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: bmc-rag-postgres
+    environment:
+      POSTGRES_DB: bmc_rag
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../vector-store/src/main/resources/db/migration:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d bmc_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - bmc-rag-network
+
+  # Ollama for local LLM inference (Disabled - using Z.AI cloud API instead)
+  # Uncomment to re-enable local Ollama inference
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: bmc-rag-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+  #     - OLLAMA_NUM_PARALLEL=2
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         memory: 8G
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+  #   networks:
+  #     - bmc-rag-network
+
+  # Pull Llama 3 model on startup (init container pattern) - Disabled
+  # ollama-pull:
+  #   image: ollama/ollama:latest
+  #   container_name: bmc-rag-ollama-pull
+  #   depends_on:
+  #     ollama:
+  #       condition: service_healthy
+  #   entrypoint: ["/bin/sh", "-c"]
+  #   command:
+  #     - |
+  #       echo "Pulling Llama 3 8B model..."
+  #       ollama pull llama3:8b
+  #       echo "Model ready!"
+  #   environment:
+  #     - OLLAMA_HOST=ollama:11434
+  #   networks:
+  #     - bmc-rag-network
+
+  # RAG Agent Application
+  rag-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: bmc-rag-agent
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # ollama:  # Disabled - using Z.AI cloud API
+      #   condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # Database
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bmc_rag
+      SPRING_DATASOURCE_USERNAME: raguser
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+
+      # Z.AI LLM Configuration
+      ZAI_API_KEY: ${ZAI_API_KEY}
+      ZAI_BASE_URL: ${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4/}
+      ZAI_MODEL: ${ZAI_MODEL:-glm-4.7}
+
+      # Ollama (Disabled - kept for reference)
+      # OLLAMA_BASE_URL: http://ollama:11434
+      # OLLAMA_MODEL: llama3:8b
+
+      # Remedy Connection (configure for your environment)
+      REMEDY_SERVER: ${REMEDY_SERVER:-remedy.example.com}
+      REMEDY_PORT: ${REMEDY_PORT:-7100}
+      REMEDY_USERNAME: ${REMEDY_USERNAME:-raguser}
+      REMEDY_PASSWORD: ${REMEDY_PASSWORD:-}
+      REMEDY_SOCKET_TIMEOUT: ${REMEDY_SOCKET_TIMEOUT:-60000}
+      REMEDY_CHUNK_SIZE: ${REMEDY_CHUNK_SIZE:-500}
+
+      # RAG Configuration
+      RAG_MAX_RESULTS: ${RAG_MAX_RESULTS:-5}
+      RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.7}
+      RAG_REBAC_ENABLED: ${RAG_REBAC_ENABLED:-true}
+
+      # Sync Configuration
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-900000}
+
+      # JVM Options
+      JAVA_OPTS: >-
+        -XX:+UseContainerSupport
+        -XX:MaxRAMPercentage=75.0
+        -XX:+UseG1GC
+        --add-opens java.base/java.lang=ALL-UNNAMED
+        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - bmc-rag-network
+
+volumes:
+  postgres_data:
+    driver: local
+  # ollama_data:  # Disabled - Ollama no longer used
+  #   driver: local
+
+networks:
+  bmc-rag-network:
+    driver: bridge

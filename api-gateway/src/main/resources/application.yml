@@ -1,0 +1,217 @@
+# BMC Remedy RAG Agent - Application Configuration
+# For on-premise deployment with local LLM inference
+
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: bmc-remedy-rag-agent
+
+  # Database Configuration (PostgreSQL + pgvector)
+  # SECURITY: No default password - must be provided via environment variable
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:bmc_rag}
+    username: ${POSTGRES_USER:raguser}
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # Flyway Migration
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+# =============================================================================
+# BMC Remedy Connection Configuration
+# =============================================================================
+remedy:
+  enabled: ${REMEDY_ENABLED:false}  # Set to true when Remedy server is available
+  server: ${REMEDY_SERVER:localhost}
+  port: ${REMEDY_PORT:7100}
+  username: ${REMEDY_USERNAME:Demo}
+  password: ${REMEDY_PASSWORD:}
+  socket-timeout: ${REMEDY_SOCKET_TIMEOUT:60000}
+  chunk-size: ${REMEDY_CHUNK_SIZE:500}
+  max-retrieve: 2000
+  retry-attempts: 3
+  retry-delay-ms: 5000
+  pool-size: 5
+
+# =============================================================================
+# Z.AI LLM Configuration (OpenAI-compatible API)
+# =============================================================================
+zai:
+  api-key: ${ZAI_API_KEY:}
+  base-url: ${ZAI_BASE_URL:https://api.z.ai/api/paas/v4/}
+  model: ${ZAI_MODEL:glm-4.5-flash}
+  temperature: 0.1              # Slight randomness for response diversity
+  timeout-seconds: 120
+  max-tokens: 4096              # Allow longer RAG responses
+  top-p: 0.8                    # More focused/deterministic responses
+  frequency-penalty: 0.3        # Reduce repetition in responses
+  thinking-enabled: ${ZAI_THINKING_ENABLED:false}   # Enable for GLM-4.7
+  thinking-type: enabled        # Options: enabled, disabled, retention
+
+# =============================================================================
+# Ollama LLM Configuration (Disabled - kept for reference/rollback)
+# =============================================================================
+# ollama:
+#   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+#   model: ${OLLAMA_MODEL:tinyllama:latest}
+#   temperature: 0.0
+#   timeout-seconds: 300
+#   max-tokens: 256
+#   top-p: 0.9
+#   num-threads: 4
+
+# =============================================================================
+# RAG Configuration
+# =============================================================================
+rag:
+  max-results: ${RAG_MAX_RESULTS:5}
+  min-score: ${RAG_MIN_SCORE:0.5}
+  max-memory-messages: 20
+  include-citations: true
+  prioritize-knowledge-articles: true
+  rebac-enabled: ${RAG_REBAC_ENABLED:true}
+  system-prompt: |
+    You are an IT support assistant. Be concise and helpful.
+
+# =============================================================================
+# Sync Configuration
+# =============================================================================
+sync:
+  interval: ${SYNC_INTERVAL:900000}  # 15 minutes in milliseconds
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+security:
+  enabled: ${SECURITY_ENABLED:true}
+
+spring.security.oauth2.resourceserver.jwt:
+  # Configure your OAuth2/OIDC provider
+  # Option 1: OIDC Discovery (recommended)
+  # issuer-uri: ${JWT_ISSUER_URI:}
+  # Option 2: Direct JWKS endpoint
+  jwk-set-uri: ${JWT_JWK_SET_URI:}
+
+# =============================================================================
+# Rate Limiting Configuration (Resilience4j)
+# =============================================================================
+resilience4j:
+  ratelimiter:
+    instances:
+      chat:
+        limit-for-period: 100
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+        register-health-indicator: true
+      search:
+        limit-for-period: 200
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+      admin:
+        limit-for-period: 10
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+logging:
+  level:
+    root: INFO
+    com.bmc.rag: INFO
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+    dev.langchain4j: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# =============================================================================
+# Management Endpoints (Actuator)
+# =============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+  health:
+    db:
+      enabled: true
+
+# =============================================================================
+# Spring Profiles
+# =============================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  # For development only - allow default password
+  datasource:
+    password: ${POSTGRES_PASSWORD:ragpassword}
+
+  # Exclude OAuth2 auto-configuration when security is disabled in dev
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration
+
+# Override security.enabled to false for dev profile
+security:
+  enabled: false
+
+logging:
+  level:
+    com.bmc.rag: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.springframework.security: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  level:
+    root: WARN
+    com.bmc.rag: INFO
+    org.springframework.security: WARN
+
+# Production hardening
+management:
+  endpoint:
+    health:
+      show-details: never

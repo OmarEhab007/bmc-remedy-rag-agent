@@ -1,0 +1,247 @@
+package com.bmc.rag.connector.util;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Builder for BMC Remedy qualification strings.
+ * Remedy uses a specific query language for filtering records.
+ */
+public class QualifierBuilder {
+
+    private final List<String> conditions = new ArrayList<>();
+
+    public QualifierBuilder() {
+    }
+
+    /**
+     * Add an equality condition using field ID.
+     * @param fieldId The numeric field ID
+     * @param value The value to match
+     * @return This builder for chaining
+     */
+    public QualifierBuilder equals(int fieldId, String value) {
+        conditions.add(String.format("'%d' = \"%s\"", fieldId, escapeValue(value)));
+        return this;
+    }
+
+    /**
+     * Add an equality condition for numeric values using field ID.
+     * @param fieldId The numeric field ID
+     * @param value The numeric value to match
+     * @return This builder for chaining
+     */
+    public QualifierBuilder equals(int fieldId, int value) {
+        conditions.add(String.format("'%d' = %d", fieldId, value));
+        return this;
+    }
+
+    /**
+     * Add a LIKE condition using field ID.
+     * @param fieldId The numeric field ID
+     * @param pattern The pattern to match (use % as wildcard)
+     * @return This builder for chaining
+     */
+    public QualifierBuilder like(int fieldId, String pattern) {
+        conditions.add(String.format("'%d' LIKE \"%s\"", fieldId, escapeValue(pattern)));
+        return this;
+    }
+
+    /**
+     * Add a greater-than condition for dates (Unix epoch).
+     * @param fieldId The numeric field ID for date field
+     * @param epochSeconds Unix epoch timestamp in seconds
+     * @return This builder for chaining
+     */
+    public QualifierBuilder dateAfter(int fieldId, long epochSeconds) {
+        conditions.add(String.format("'%d' > %d", fieldId, epochSeconds));
+        return this;
+    }
+
+    /**
+     * Add a greater-than condition for dates using LocalDateTime.
+     * @param fieldId The numeric field ID for date field
+     * @param dateTime The date/time threshold
+     * @return This builder for chaining
+     */
+    public QualifierBuilder dateAfter(int fieldId, LocalDateTime dateTime) {
+        long epochSeconds = dateTime.toEpochSecond(ZoneOffset.UTC);
+        return dateAfter(fieldId, epochSeconds);
+    }
+
+    /**
+     * Add a greater-than condition for dates using Instant.
+     * @param fieldId The numeric field ID for date field
+     * @param instant The instant threshold
+     * @return This builder for chaining
+     */
+    public QualifierBuilder dateAfter(int fieldId, Instant instant) {
+        return dateAfter(fieldId, instant.getEpochSecond());
+    }
+
+    /**
+     * Add a less-than condition for dates (Unix epoch).
+     * @param fieldId The numeric field ID for date field
+     * @param epochSeconds Unix epoch timestamp in seconds
+     * @return This builder for chaining
+     */
+    public QualifierBuilder dateBefore(int fieldId, long epochSeconds) {
+        conditions.add(String.format("'%d' < %d", fieldId, epochSeconds));
+        return this;
+    }
+
+    /**
+     * Add a less-than-or-equal condition for dates (Unix epoch).
+     * @param fieldId The numeric field ID for date field
+     * @param epochSeconds Unix epoch timestamp in seconds
+     * @return This builder for chaining
+     */
+    public QualifierBuilder dateOnOrBefore(int fieldId, long epochSeconds) {
+        conditions.add(String.format("'%d' <= %d", fieldId, epochSeconds));
+        return this;
+    }
+
+    /**
+     * Add a date range condition.
+     * @param fieldId The numeric field ID for date field
+     * @param startEpoch Start of range (Unix epoch)
+     * @param endEpoch End of range (Unix epoch)
+     * @return This builder for chaining
+     */
+    public QualifierBuilder dateBetween(int fieldId, long startEpoch, long endEpoch) {
+        conditions.add(String.format("('%d' >= %d AND '%d' <= %d)",
+            fieldId, startEpoch, fieldId, endEpoch));
+        return this;
+    }
+
+    /**
+     * Add an IN condition for multiple values.
+     * @param fieldId The numeric field ID
+     * @param values The values to match
+     * @return This builder for chaining
+     */
+    public QualifierBuilder in(int fieldId, List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return this;
+        }
+        List<String> quotedValues = new ArrayList<>();
+        for (String value : values) {
+            quotedValues.add(String.format("\"%s\"", escapeValue(value)));
+        }
+        conditions.add(String.format("'%d' = %s", fieldId, String.join(" OR '%d' = ", quotedValues)));
+        return this;
+    }
+
+    /**
+     * Add a NOT NULL condition.
+     * @param fieldId The numeric field ID
+     * @return This builder for chaining
+     */
+    public QualifierBuilder isNotNull(int fieldId) {
+        conditions.add(String.format("'%d' != $NULL$", fieldId));
+        return this;
+    }
+
+    /**
+     * Add a NULL condition.
+     * @param fieldId The numeric field ID
+     * @return This builder for chaining
+     */
+    public QualifierBuilder isNull(int fieldId) {
+        conditions.add(String.format("'%d' = $NULL$", fieldId));
+        return this;
+    }
+
+    /**
+     * Add a status condition for active records (not closed/cancelled).
+     * Uses common status field ID 7.
+     * @param closedStatus The status value representing closed
+     * @param cancelledStatus The status value representing cancelled
+     * @return This builder for chaining
+     */
+    public QualifierBuilder statusActive(int closedStatus, int cancelledStatus) {
+        conditions.add(String.format("'%d' != %d AND '%d' != %d",
+            FieldIdConstants.STATUS, closedStatus, FieldIdConstants.STATUS, cancelledStatus));
+        return this;
+    }
+
+    /**
+     * Add a raw qualification string.
+     * Use this for complex conditions that can't be expressed with the builder methods.
+     * @param rawQualification The raw qualification string
+     * @return This builder for chaining
+     */
+    public QualifierBuilder raw(String rawQualification) {
+        conditions.add("(" + rawQualification + ")");
+        return this;
+    }
+
+    /**
+     * Build the final qualification string with AND logic.
+     * @return The qualification string, or null if no conditions
+     */
+    public String build() {
+        if (conditions.isEmpty()) {
+            return null;
+        }
+        return String.join(" AND ", conditions);
+    }
+
+    /**
+     * Build the final qualification string with OR logic.
+     * @return The qualification string, or null if no conditions
+     */
+    public String buildWithOr() {
+        if (conditions.isEmpty()) {
+            return null;
+        }
+        return "(" + String.join(" OR ", conditions) + ")";
+    }
+
+    /**
+     * Create a qualifier for incremental sync based on last modified date.
+     * @param lastSyncTimestamp Unix epoch timestamp of last sync
+     * @return Qualification string
+     */
+    public static String incrementalSyncQualifier(long lastSyncTimestamp) {
+        return new QualifierBuilder()
+            .dateAfter(FieldIdConstants.LAST_MODIFIED_DATE, lastSyncTimestamp)
+            .build();
+    }
+
+    /**
+     * Create a qualifier to find records by parent ID (for work logs).
+     * @param parentFieldId The field ID that holds the parent reference
+     * @param parentId The parent record ID
+     * @return Qualification string
+     */
+    public static String byParentId(int parentFieldId, String parentId) {
+        return new QualifierBuilder()
+            .equals(parentFieldId, parentId)
+            .build();
+    }
+
+    /**
+     * Escape special characters in values for Remedy qualification.
+     */
+    private String escapeValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"");
+    }
+
+    /**
+     * Reset the builder for reuse.
+     * @return This builder for chaining
+     */
+    public QualifierBuilder reset() {
+        conditions.clear();
+        return this;
+    }
+}

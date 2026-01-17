@@ -1,0 +1,893 @@
+________________________________________________________________________________
+11. Frontend Presentation Layer: Multi-Channel User Interface Architecture
+________________________________________________________________________________
+
+The RAG agent's value proposition is only realized through effective user interfaces that seamlessly integrate into the existing ITSM workflow. This section details a dual-channel frontend strategy: a web-based chat interface that mirrors the familiar BMC Helix design language, and a Microsoft Teams bot that extends the agent's reach into the organization's collaboration platform.
+
+11.1 Architectural Overview: The Interface Gateway
+
+The frontend layer acts as a "Gateway" between human support agents and the AI-powered RAG core. Unlike traditional request-response web applications, the chat interface demands persistent, bidirectional communication to stream AI responses in real-time—a fundamental requirement for user experience parity with modern conversational AI systems.
+
+                                    ┌─────────────────────────────────────────┐
+                                    │         User Interaction Layer          │
+                                    │  ┌─────────────┐    ┌─────────────────┐ │
+                                    │  │  Web Chat   │    │  Microsoft      │ │
+                                    │  │  (React)    │    │  Teams Bot      │ │
+                                    │  └──────┬──────┘    └────────┬────────┘ │
+                                    └─────────┼────────────────────┼──────────┘
+                                              │                    │
+                    ┌─────────────────────────┴────────────────────┴───────────┐
+                    │                  API Gateway Layer                        │
+                    │  ┌────────────────────┐    ┌───────────────────────────┐ │
+                    │  │ WebSocket/STOMP    │    │ Bot Framework Connector   │ │
+                    │  │ (SockJS Fallback)  │    │ (/api/messages endpoint)  │ │
+                    │  └─────────┬──────────┘    └────────────┬──────────────┘ │
+                    └────────────┼─────────────────────────────┼───────────────┘
+                                 │                             │
+                    ┌────────────┴─────────────────────────────┴───────────────┐
+                    │              Spring Boot Backend Core                     │
+                    │  ┌──────────────────────────────────────────────────────┐│
+                    │  │            Chat Service Layer                        ││
+                    │  │  ┌───────────────┐  ┌───────────────┐  ┌───────────┐││
+                    │  │  │ Session Mgmt  │  │ Message Queue │  │ Response  │││
+                    │  │  │ & Memory      │  │ & Routing     │  │ Streaming │││
+                    │  │  └───────────────┘  └───────────────┘  └───────────┘││
+                    │  └─────────────────────────┬────────────────────────────┘│
+                    │                            │                             │
+                    │  ┌─────────────────────────┴────────────────────────────┐│
+                    │  │         LangChain4j RAG Agent Core                   ││
+                    │  │  (Vectorization, Retrieval, LLM Inference)           ││
+                    │  └──────────────────────────────────────────────────────┘│
+                    └──────────────────────────────────────────────────────────┘
+
+Table 11.1: Frontend Architecture Components
+┌─────────────────────┬──────────────────────────────────────────────────────────┐
+│ Component           │ Technology Stack                                         │
+├─────────────────────┼──────────────────────────────────────────────────────────┤
+│ Web Chat UI         │ React 18+, TypeScript, Tailwind CSS, HelixUI-inspired    │
+│ Real-time Transport │ WebSocket + STOMP Protocol, SockJS Fallback              │
+│ Backend API         │ Spring Boot 3.x, Spring WebSocket, Spring Security       │
+│ Teams Integration   │ Microsoft Bot Framework SDK for Java (botbuilder-java)   │
+│ Message Format      │ Adaptive Cards (JSON), Markdown, Plain Text              │
+│ State Management    │ React Context + PostgreSQL-backed Session Persistence    │
+└─────────────────────┴──────────────────────────────────────────────────────────┘
+
+________________________________________________________________________________
+11.2 Web Chat Interface: BMC Helix-Inspired Design System
+________________________________________________________________________________
+
+The web-based chat interface is the primary interaction point for Service Desk agents operating within the Remedy Console environment. The design philosophy adheres to the BMC Helix Digital Workplace aesthetic to ensure visual consistency and minimize cognitive load during adoption.
+
+11.2.1 Design System Foundation: Helix UI Language
+
+The interface draws from the HelixUI Web Components library principles—a design system that provides consistent markup, styles, and behavior across enterprise applications. While the actual HelixUI library (github.com/HelixDesignSystem/helix-ui) targets the Rackspace ecosystem, its core tenets apply universally to ITSM interfaces:
+
+Design Principles:
+1. Functional Clarity: Every UI element serves a clear purpose with minimal decoration.
+2. Contextual Awareness: The interface adapts based on the user's role and current ticket context.
+3. Professional Typography: Sans-serif font stack (Roboto, Open Sans, or system fonts) at readable sizes.
+4. Restrained Color Palette: Neutral backgrounds with accent colors for actionable elements.
+5. Accessible Contrast: WCAG 2.1 AA compliance (4.5:1 minimum contrast ratio).
+
+Table 11.2: BMC Helix-Inspired Color Palette
+┌─────────────────────┬─────────────┬─────────────────────────────────────────┐
+│ Color Role          │ Hex Value   │ Usage                                   │
+├─────────────────────┼─────────────┼─────────────────────────────────────────┤
+│ Primary Background  │ #FFFFFF     │ Main chat area, input fields            │
+│ Secondary Background│ #F5F7FA     │ Agent message bubbles, sidebar          │
+│ Primary Text        │ #1C2833     │ Body text, labels                       │
+│ Secondary Text      │ #6B7280     │ Timestamps, metadata, placeholders      │
+│ Primary Accent      │ #0066CC     │ User message bubbles, primary buttons   │
+│ Success Accent      │ #28A745     │ Resolved status, positive actions       │
+│ Warning Accent      │ #FFC107     │ Pending status, caution indicators      │
+│ Error Accent        │ #DC3545     │ Error messages, critical alerts         │
+│ Border              │ #E5E7EB     │ Dividers, card outlines                 │
+│ Citation Highlight  │ #E3F2FD     │ Background for incident citations       │
+└─────────────────────┴─────────────┴─────────────────────────────────────────┘
+
+11.2.2 Component Architecture: React Implementation
+
+The chat interface is built as a modular React application, designed for embedding within the BMC Remedy Mid-Tier web interface or deploying as a standalone application.
+
+Component Hierarchy:
+
+<ChatApplication>
+├── <ChatProvider>                    // Context for global state (session, user, messages)
+│   ├── <ChatHeader>                  // Logo, session info, connection status indicator
+│   ├── <ChatSidebar>                 // Conversation history, quick actions
+│   │   ├── <ConversationList>        // Past chat sessions
+│   │   └── <QuickActionPanel>        // "New Query", "Clear Chat", "Export"
+│   ├── <ChatMain>
+│   │   ├── <MessageContainer>        // Scrollable message area
+│   │   │   ├── <MessageBubble>       // Individual message (user or agent)
+│   │   │   │   ├── <MessageContent>  // Text, markdown rendering
+│   │   │   │   ├── <CitationBlock>   // Incident references with links
+│   │   │   │   └── <MessageMeta>     // Timestamp, delivery status
+│   │   │   ├── <TypingIndicator>     // "Agent is thinking..." animation
+│   │   │   └── <StreamingMessage>    // Real-time token-by-token display
+│   │   └── <SuggestionChips>         // Quick-reply suggestions
+│   └── <InputArea>
+│       ├── <TextInput>               // Multi-line input with auto-resize
+│       ├── <AttachmentButton>        // File upload (screenshots, logs)
+│       └── <SendButton>              // Submit with Enter key support
+└── <WebSocketProvider>               // Connection management wrapper
+
+Key React Components Specification:
+
+a) MessageBubble Component:
+   - Differentiates user (right-aligned, primary accent) vs. agent (left-aligned, neutral).
+   - Renders Markdown with syntax highlighting for code blocks (using react-markdown).
+   - Displays citation blocks with direct links to Remedy incident URLs.
+   - Shows "Copied!" toast on click-to-copy for incident numbers.
+
+b) StreamingMessage Component:
+   - Critical for UX: displays LLM response tokens as they arrive (not waiting for full response).
+   - Uses a cursor animation during streaming.
+   - Converts final streamed content to a standard MessageBubble on completion.
+
+c) CitationBlock Component:
+   Purpose: Transforms incident references (e.g., "INC000012345") into interactive elements.
+   
+   Features:
+   - Auto-detection of incident number patterns via regex: /INC[0-9]{9,12}/gi
+   - Clickable links that open Remedy Mid-Tier forms (configurable URL template)
+   - Hover preview showing incident summary (fetched via AJAX from Remedy REST API)
+   - Visual distinction with light blue background (#E3F2FD) and border
+
+11.2.3 Real-Time Communication: WebSocket + STOMP Implementation
+
+Traditional HTTP polling is unsuitable for chat applications due to latency and server load. The architecture implements WebSocket with STOMP (Simple Text Oriented Messaging Protocol) for structured pub/sub messaging.
+
+Spring Boot WebSocket Configuration:
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        // Client subscribes to /topic/* for broadcast messages
+        // Client subscribes to /user/queue/* for private messages
+        config.enableSimpleBroker("/topic", "/queue");
+        
+        // Messages from client to server prefixed with /app
+        config.setApplicationDestinationPrefixes("/app");
+        
+        // User-specific destinations
+        config.setUserDestinationPrefix("/user");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // WebSocket endpoint with SockJS fallback for IE11/legacy browsers
+        registry.addEndpoint("/ws-chat")
+                .setAllowedOriginPatterns("*")
+                .withSockJS()
+                .setHeartbeatTime(25000)
+                .setDisconnectDelay(5000);
+    }
+}
+
+STOMP Message Flow:
+
+1. Connection: Client connects to /ws-chat endpoint via SockJS.
+2. Subscription: Client subscribes to /user/queue/response for personalized responses.
+3. Send Query: Client sends message to /app/chat.query destination.
+4. Processing: ChatController receives, invokes RAG pipeline, streams response.
+5. Stream Response: Server publishes tokens to user's private queue.
+6. Completion: Final message includes metadata (sources, confidence, latency).
+
+Chat Controller Implementation:
+
+@Controller
+public class ChatController {
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+    
+    @Autowired
+    private RAGService ragService;
+    
+    @Autowired
+    private SessionService sessionService;
+
+    @MessageMapping("/chat.query")
+    public void handleChatQuery(@Payload ChatQueryMessage query,
+                                 Principal principal,
+                                 SimpMessageHeaderAccessor headerAccessor) {
+        
+        String sessionId = headerAccessor.getSessionId();
+        String userId = principal.getName();
+        
+        // Validate session and rate limiting
+        sessionService.validateSession(sessionId, userId);
+        
+        // Send acknowledgment
+        sendAck(userId, query.getMessageId());
+        
+        // Stream response tokens
+        ragService.queryWithStreaming(query.getText(), userId, token -> {
+            ChatResponseChunk chunk = new ChatResponseChunk(
+                query.getMessageId(),
+                token,
+                false  // isComplete
+            );
+            messagingTemplate.convertAndSendToUser(
+                userId,
+                "/queue/response",
+                chunk
+            );
+        }).thenAccept(finalResponse -> {
+            // Send final message with citations
+            ChatResponseChunk complete = new ChatResponseChunk(
+                query.getMessageId(),
+                "",
+                true,
+                finalResponse.getCitations(),
+                finalResponse.getConfidenceScore()
+            );
+            messagingTemplate.convertAndSendToUser(userId, "/queue/response", complete);
+        });
+    }
+}
+
+React WebSocket Client (using stompjs):
+
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+
+const useWebSocket = (onMessageReceived) => {
+  const clientRef = useRef(null);
+  
+  useEffect(() => {
+    const client = new Client({
+      webSocketFactory: () => new SockJS('/ws-chat'),
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
+      
+      onConnect: () => {
+        // Subscribe to personal response queue
+        client.subscribe('/user/queue/response', (message) => {
+          const chunk = JSON.parse(message.body);
+          onMessageReceived(chunk);
+        });
+        
+        // Subscribe to connection status
+        client.subscribe('/user/queue/status', handleStatusUpdate);
+      },
+      
+      onStompError: (frame) => {
+        console.error('STOMP error:', frame.headers['message']);
+      }
+    });
+    
+    client.activate();
+    clientRef.current = client;
+    
+    return () => client.deactivate();
+  }, []);
+  
+  const sendMessage = (text) => {
+    clientRef.current.publish({
+      destination: '/app/chat.query',
+      body: JSON.stringify({
+        messageId: generateUUID(),
+        text: text,
+        timestamp: new Date().toISOString()
+      })
+    });
+  };
+  
+  return { sendMessage };
+};
+
+11.2.4 Embedding in BMC Remedy Mid-Tier
+
+The chat widget can be embedded within the Remedy Mid-Tier console as a floating panel or sidebar widget, providing contextual assistance without leaving the ticket interface.
+
+Integration Approaches:
+
+a) iFrame Embedding (Recommended for Air-Gap):
+   - Deploy chat app on internal server (e.g., https://rag-agent.internal:8443)
+   - Add iFrame to Remedy forms via "ActiveLink" View Field action
+   - Pass ticket context via URL parameters (Incident Number, Status, Assigned Group)
+   - Secure with same-origin policy and token-based authentication
+
+b) JavaScript Widget Embedding:
+   - Build React app as a single bundle (Webpack/Vite)
+   - Inject via Remedy Custom Script or browser extension
+   - Communicates with backend via WebSocket
+   - Advantages: Full DOM access for deep integration (auto-fill Resolution field)
+
+c) BMC Helix Innovation Studio Integration:
+   - For BMC Helix 20.x+ environments
+   - Use HelixGPT Chat Component paradigm
+   - Configure as custom view component in Innovation Studio
+   - Leverage existing Helix authentication and session management
+
+Context Passing Example (URL Parameters):
+https://rag-agent.internal:8443/chat?incident=INC000012345&group=ServerAdmin&status=In+Progress
+
+The chat application reads these parameters and:
+1. Pre-populates the initial query context
+2. Filters RAG results to the user's authorized groups (ReBAC)
+3. Provides direct "Insert Resolution" action back to Remedy
+
+________________________________________________________________________________
+11.3 Microsoft Teams Bot Integration
+________________________________________________________________________________
+
+Extending the RAG agent to Microsoft Teams enables support agents to access historical resolution knowledge without switching applications—a critical productivity enhancement for organizations where Teams is the primary collaboration platform.
+
+11.3.1 Microsoft Teams Bot Architecture
+
+The integration leverages the Microsoft Bot Framework SDK for Java (botbuilder-java), which handles the complex OAuth flows, activity routing, and message serialization required for Teams communication.
+
+Architectural Components:
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           Microsoft Cloud Services                          │
+│  ┌──────────────────┐    ┌───────────────────┐    ┌───────────────────┐   │
+│  │ Microsoft Teams  │───▶│ Azure Bot Service │───▶│ Bot Channel       │   │
+│  │ (Client Apps)    │    │ (Message Router)  │    │ Registration      │   │
+│  └──────────────────┘    └─────────┬─────────┘    └───────────────────┘   │
+│                                    │                                        │
+│                          HTTPS (TLS 1.2+)                                   │
+└────────────────────────────────────┼────────────────────────────────────────┘
+                                     │
+                        ┌────────────▼────────────┐
+                        │    Reverse Proxy        │
+                        │  (nginx/Azure App GW)   │
+                        │  - SSL Termination      │
+                        │  - Request Validation   │
+                        └────────────┬────────────┘
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────────┐
+│               On-Premise / Private Cloud (Air-Gap Boundary)                 │
+│                                    │                                        │
+│                        ┌───────────▼───────────┐                            │
+│                        │  Spring Boot Backend  │                            │
+│                        │  /api/messages        │                            │
+│                        │  (Bot Framework       │                            │
+│                        │   SDK for Java)       │                            │
+│                        └───────────┬───────────┘                            │
+│                                    │                                        │
+│                        ┌───────────▼───────────┐                            │
+│                        │  RAG Agent Core       │                            │
+│                        │  (LangChain4j)        │                            │
+│                        └───────────────────────┘                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CRITICAL: Air-Gap Considerations for Teams Integration:
+
+The Microsoft Teams bot requires outbound HTTPS connectivity to Azure Bot Service for message routing. In strictly air-gapped environments, this integration may not be feasible without a DMZ proxy architecture:
+
+Option A (Hybrid): Deploy a lightweight message relay in DMZ that:
+   - Receives inbound webhook from Azure Bot Service
+   - Forwards to internal RAG agent via internal firewall rule
+   - Returns responses to Azure Bot Service
+
+Option B (Fully Air-Gapped Alternative): Use Microsoft Teams Outgoing Webhooks or Teams Messaging Extensions that can be configured to call internal endpoints without Azure Bot Service dependency (limited functionality).
+
+11.3.2 Bot Framework SDK Implementation
+
+Spring Boot Integration with Bot Framework:
+
+Dependencies (pom.xml):
+<dependency>
+    <groupId>com.microsoft.bot</groupId>
+    <artifactId>bot-builder</artifactId>
+    <version>4.14.3</version>
+</dependency>
+<dependency>
+    <groupId>com.microsoft.bot</groupId>
+    <artifactId>bot-integration-spring</artifactId>
+    <version>4.14.3</version>
+</dependency>
+
+Bot Controller:
+
+@RestController
+@RequestMapping("/api")
+public class BotController {
+
+    private final BotFrameworkHttpAdapter adapter;
+    private final RemedyRAGBot bot;
+
+    public BotController(BotFrameworkHttpAdapter adapter, RemedyRAGBot bot) {
+        this.adapter = adapter;
+        this.bot = bot;
+    }
+
+    @PostMapping("/messages")
+    public CompletableFuture<ResponseEntity<Object>> handleIncomingMessages(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        
+        return adapter.processIncomingActivity(request, response, bot)
+                      .thenApply(result -> ResponseEntity.ok().build());
+    }
+}
+
+Bot Implementation with RAG Integration:
+
+@Component
+public class RemedyRAGBot extends ActivityHandler {
+
+    @Autowired
+    private RAGService ragService;
+    
+    @Autowired
+    private SessionService sessionService;
+
+    @Override
+    protected CompletableFuture<Void> onMessageActivity(TurnContext turnContext) {
+        String userMessage = turnContext.getActivity().getText();
+        String userId = turnContext.getActivity().getFrom().getId();
+        String conversationId = turnContext.getActivity().getConversation().getId();
+        
+        // Send typing indicator
+        return turnContext.sendActivity(Activity.createTypingActivity())
+            .thenCompose(typingResponse -> {
+                
+                // Query RAG agent
+                return ragService.query(userMessage, userId)
+                    .thenCompose(response -> {
+                        
+                        // Build Adaptive Card response
+                        Attachment card = buildResponseCard(response);
+                        
+                        Activity reply = MessageFactory.attachment(card);
+                        return turnContext.sendActivity(reply);
+                    });
+            })
+            .thenApply(sendResult -> null);
+    }
+
+    @Override
+    protected CompletableFuture<Void> onMembersAdded(
+            List<ChannelAccount> membersAdded,
+            TurnContext turnContext) {
+        
+        for (ChannelAccount member : membersAdded) {
+            if (!member.getId().equals(turnContext.getActivity().getRecipient().getId())) {
+                Activity welcomeMessage = MessageFactory.text(
+                    "👋 Hello! I'm the Remedy Knowledge Assistant. " +
+                    "Ask me about past incidents and I'll search our historical resolution database. " +
+                    "Try: \"How do I fix Exchange SMTP service failures?\""
+                );
+                return turnContext.sendActivity(welcomeMessage).thenApply(r -> null);
+            }
+        }
+        return CompletableFuture.completedFuture(null);
+    }
+    
+    private Attachment buildResponseCard(RAGResponse response) {
+        // See Section 11.3.3 for Adaptive Card implementation
+    }
+}
+
+11.3.3 Adaptive Cards for Rich Responses
+
+Adaptive Cards provide a cross-platform UI framework for rendering rich content in Teams. The RAG agent responses are formatted as Adaptive Cards to display:
+- The AI-generated answer with proper formatting
+- Citation blocks linking to source incidents
+- Confidence indicators
+- Feedback buttons (thumbs up/down)
+
+Adaptive Card JSON Template:
+
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "🤖 Remedy Knowledge Assistant",
+      "weight": "Bolder",
+      "size": "Medium",
+      "color": "Accent"
+    },
+    {
+      "type": "TextBlock",
+      "text": "${answer}",
+      "wrap": true,
+      "spacing": "Medium"
+    },
+    {
+      "type": "Container",
+      "style": "emphasis",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "📚 Sources",
+          "weight": "Bolder",
+          "size": "Small"
+        },
+        {
+          "type": "FactSet",
+          "facts": [
+            {
+              "$data": "${citations}",
+              "title": "${incidentNumber}",
+              "value": "${summary}"
+            }
+          ]
+        }
+      ],
+      "separator": true,
+      "spacing": "Medium"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Confidence: ${confidenceScore}%",
+      "size": "Small",
+      "color": "${confidenceColor}",
+      "horizontalAlignment": "Right"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "View in Remedy",
+      "url": "${remedyUrl}"
+    },
+    {
+      "type": "Action.Submit",
+      "title": "👍 Helpful",
+      "data": { "feedback": "positive", "responseId": "${responseId}" }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "👎 Not Helpful",
+      "data": { "feedback": "negative", "responseId": "${responseId}" }
+    }
+  ]
+}
+
+Java Adaptive Card Builder:
+
+private Attachment buildResponseCard(RAGResponse response) {
+    ObjectMapper mapper = new ObjectMapper();
+    ObjectNode card = mapper.createObjectNode();
+    
+    card.put("$schema", "http://adaptivecards.io/schemas/adaptive-card.json");
+    card.put("type", "AdaptiveCard");
+    card.put("version", "1.4");
+    
+    ArrayNode body = card.putArray("body");
+    
+    // Header
+    ObjectNode header = body.addObject();
+    header.put("type", "TextBlock");
+    header.put("text", "🤖 Remedy Knowledge Assistant");
+    header.put("weight", "Bolder");
+    header.put("size", "Medium");
+    
+    // Answer
+    ObjectNode answer = body.addObject();
+    answer.put("type", "TextBlock");
+    answer.put("text", response.getAnswer());
+    answer.put("wrap", true);
+    
+    // Citations
+    if (!response.getCitations().isEmpty()) {
+        ObjectNode citationContainer = body.addObject();
+        citationContainer.put("type", "Container");
+        citationContainer.put("style", "emphasis");
+        
+        ArrayNode citationItems = citationContainer.putArray("items");
+        
+        ObjectNode citationHeader = citationItems.addObject();
+        citationHeader.put("type", "TextBlock");
+        citationHeader.put("text", "📚 Sources: " + 
+            response.getCitations().stream()
+                .map(c -> c.getIncidentNumber())
+                .collect(Collectors.joining(", ")));
+        citationHeader.put("size", "Small");
+    }
+    
+    // Convert to Attachment
+    Attachment attachment = new Attachment();
+    attachment.setContentType("application/vnd.microsoft.card.adaptive");
+    attachment.setContent(card);
+    
+    return attachment;
+}
+
+11.3.4 Teams Bot Deployment and Registration
+
+Deployment Steps:
+
+1. Azure Bot Registration (Required even for on-premise bot):
+   - Navigate to Azure Portal → Create Resource → Azure Bot
+   - Configure Messaging Endpoint: https://<your-domain>/api/messages
+   - Generate Microsoft App ID and Password
+   - Enable Teams channel in Bot Channels Registration
+
+2. Application Configuration:
+   application.yml:
+   ```yaml
+   microsoft:
+     bot:
+       appId: ${MICROSOFT_APP_ID}
+       appPassword: ${MICROSOFT_APP_PASSWORD}
+       tenantId: ${AZURE_TENANT_ID}  # For single-tenant bots
+   ```
+
+3. Teams App Manifest (manifest.json):
+   ```json
+   {
+     "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.14/MicrosoftTeams.schema.json",
+     "manifestVersion": "1.14",
+     "version": "1.0.0",
+     "id": "<<YOUR-BOT-ID>>",
+     "packageName": "com.company.remedy.ragbot",
+     "name": {
+       "short": "Remedy Assistant",
+       "full": "Remedy Knowledge Assistant"
+     },
+     "description": {
+       "short": "AI-powered incident resolution assistant",
+       "full": "Query historical incident resolutions from BMC Remedy using natural language."
+     },
+     "icons": {
+       "color": "color.png",
+       "outline": "outline.png"
+     },
+     "accentColor": "#0066CC",
+     "bots": [
+       {
+         "botId": "<<YOUR-BOT-ID>>",
+         "scopes": ["personal", "team", "groupchat"],
+         "supportsFiles": false,
+         "isNotificationOnly": false,
+         "commandLists": [
+           {
+             "scopes": ["personal"],
+             "commands": [
+               { "title": "help", "description": "Show usage instructions" },
+               { "title": "search", "description": "Search incident resolutions" }
+             ]
+           }
+         ]
+       }
+     ],
+     "permissions": ["identity", "messageTeamMembers"],
+     "validDomains": ["your-domain.com"]
+   }
+   ```
+
+4. Sideload or Publish to Teams:
+   - For testing: Upload .zip package to Teams Admin Center
+   - For production: Submit to organization's app catalog or Microsoft AppSource
+
+________________________________________________________________________________
+11.4 Cross-Platform Abstraction: FINOS Spring Bot (Alternative)
+________________________________________________________________________________
+
+For organizations requiring a single codebase that targets both Microsoft Teams and other platforms (Slack, Symphony), the FINOS Spring Bot framework provides an abstraction layer.
+
+Spring Bot Integration Pattern:
+
+Spring Bot (springbot.finos.org) offers annotation-based development similar to Spring MVC:
+
+@Controller
+public class RAGBotController {
+
+    @Autowired
+    private RAGService ragService;
+
+    @ChatRequest(value = "search", description = "Search incident resolutions")
+    public Response search(@ChatVariable("query") String query, Addressable a) {
+        RAGResponse response = ragService.query(query, a.getUserId());
+        return new Response(response.getAnswer(), response.getCitations());
+    }
+    
+    @ChatButton(value = Response.class, buttonText = "View Details")
+    public IncidentDetails viewDetails(@ChatVariable("incidentId") String incidentId) {
+        return remedyService.getIncidentDetails(incidentId);
+    }
+}
+
+Benefits:
+- Single codebase for Teams + Symphony + future platforms
+- Automatic template generation for POJOs (forms, buttons)
+- Stateless architecture using chat platform storage
+- Open-source (Apache 2.0 license) with no vendor lock-in
+
+Considerations:
+- Adds abstraction overhead
+- May limit platform-specific features (Adaptive Card customization)
+- Requires additional dependency management
+
+________________________________________________________________________________
+11.5 Security Architecture for Frontend Layer
+________________________________________________________________________________
+
+11.5.1 Authentication and Authorization
+
+Web Chat Authentication:
+- Integrates with existing BMC Remedy SSO (typically SAML 2.0 or OAuth 2.0)
+- Session tokens passed via WebSocket STOMP headers
+- Token validation on every message (not just connection)
+
+@Component
+public class WebSocketAuthInterceptor implements ChannelInterceptor {
+
+    @Autowired
+    private TokenValidationService tokenService;
+
+    @Override
+    public Message<?> preSend(Message<?> message, MessageChannel channel) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
+        
+        if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+            String authToken = accessor.getFirstNativeHeader("Authorization");
+            
+            if (authToken == null || !tokenService.validate(authToken)) {
+                throw new AuthenticationException("Invalid or missing token");
+            }
+            
+            // Extract user and groups for ReBAC filtering
+            UserPrincipal user = tokenService.extractPrincipal(authToken);
+            accessor.setUser(user);
+        }
+        
+        return message;
+    }
+}
+
+Teams Bot Authentication:
+- Azure Bot Service handles OAuth token validation
+- Bot Framework SDK verifies JWT signature against Microsoft keys
+- Tenant ID validation for single-tenant deployments
+
+11.5.2 Input Sanitization and Rate Limiting
+
+All user inputs are sanitized before processing:
+
+@Service
+public class InputSanitizationService {
+
+    private static final int MAX_MESSAGE_LENGTH = 4000;
+    private static final Pattern INJECTION_PATTERN = 
+        Pattern.compile("(?i)(ignore|disregard|forget).*(instruction|previous|system)");
+
+    public String sanitize(String input) {
+        if (input == null) return "";
+        
+        // Length limit
+        String sanitized = input.substring(0, Math.min(input.length(), MAX_MESSAGE_LENGTH));
+        
+        // Remove potential prompt injection attempts
+        if (INJECTION_PATTERN.matcher(sanitized).find()) {
+            log.warn("Potential prompt injection detected: {}", sanitized);
+            throw new SecurityException("Invalid input detected");
+        }
+        
+        // HTML entity encoding
+        sanitized = HtmlUtils.htmlEscape(sanitized);
+        
+        return sanitized.trim();
+    }
+}
+
+Rate Limiting Configuration:
+
+@Configuration
+public class RateLimitConfig {
+
+    @Bean
+    public RateLimiter chatRateLimiter() {
+        return RateLimiter.of("chat", RateLimiterConfig.custom()
+            .limitForPeriod(10)           // 10 requests
+            .limitRefreshPeriod(Duration.ofMinutes(1))  // per minute
+            .timeoutDuration(Duration.ofSeconds(5))
+            .build());
+    }
+}
+
+________________________________________________________________________________
+11.6 Operational Considerations
+________________________________________________________________________________
+
+11.6.1 Monitoring and Observability
+
+Key Metrics to Track:
+- WebSocket connection count (gauge)
+- Messages per second (counter)
+- RAG query latency (histogram) - P50, P95, P99
+- LLM token consumption (counter)
+- Citation accuracy (feedback-based)
+
+Prometheus Metrics Endpoint:
+
+@Component
+public class ChatMetrics {
+
+    private final Counter messageCounter;
+    private final Timer queryLatencyTimer;
+    private final Gauge activeConnections;
+
+    public ChatMetrics(MeterRegistry registry) {
+        this.messageCounter = Counter.builder("chat.messages.total")
+            .description("Total chat messages processed")
+            .register(registry);
+            
+        this.queryLatencyTimer = Timer.builder("chat.query.latency")
+            .description("RAG query processing time")
+            .register(registry);
+            
+        this.activeConnections = Gauge.builder("chat.connections.active",
+            () -> sessionRegistry.getActiveSessionCount())
+            .register(registry);
+    }
+}
+
+11.6.2 Error Handling and Graceful Degradation
+
+The frontend implements multiple fallback strategies:
+
+1. WebSocket Disconnection: Automatic reconnection with exponential backoff (5s, 10s, 20s, 60s max)
+2. RAG Service Timeout: Display "Service temporarily unavailable" with retry button
+3. LLM Overload: Queue requests with position indicator
+4. Citation Link Failure: Show incident number as plain text (still copyable)
+
+Error Response Card (Teams):
+
+{
+  "type": "AdaptiveCard",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "⚠️ I encountered an issue processing your request.",
+      "color": "Warning",
+      "weight": "Bolder"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Error: ${errorMessage}",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "Please try again or contact support if the issue persists.",
+      "size": "Small",
+      "color": "Accent"
+    }
+  ],
+  "actions": [
+    { "type": "Action.Submit", "title": "🔄 Retry", "data": { "action": "retry" } }
+  ]
+}
+
+________________________________________________________________________________
+11.7 Future Enhancements Roadmap
+________________________________________________________________________________
+
+The frontend layer is designed for iterative enhancement:
+
+Phase 1 (Current): Basic Chat + Teams Integration
+- Text-based Q&A with citation
+- WebSocket streaming responses
+- Adaptive Card formatting
+
+Phase 2: Contextual Integration
+- Auto-detect ticket context from Remedy Mid-Tier
+- Pre-populate queries based on current incident
+- "Insert to Resolution" one-click action
+
+Phase 3: Proactive Assistance
+- Real-time similar incident suggestions while typing in Remedy
+- Push notifications for relevant new resolutions
+- Trend analysis dashboards embedded in chat
+
+Phase 4: Voice and Multimodal
+- Voice input via Web Speech API
+- Screenshot analysis (OCR + image embedding)
+- Video tutorial suggestions from knowledge base
+
+________________________________________________________________________________
