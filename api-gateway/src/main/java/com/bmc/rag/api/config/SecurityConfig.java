@@ -1,5 +1,6 @@
 package com.bmc.rag.api.config;
 
+import com.bmc.rag.api.filter.RateLimitFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -14,6 +15,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * Security configuration for the RAG API.
@@ -33,6 +35,12 @@ public class SecurityConfig {
     @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}")
     private String jwkSetUri;
 
+    private final RateLimitFilter rateLimitFilter;
+
+    public SecurityConfig(RateLimitFilter rateLimitFilter) {
+        this.rateLimitFilter = rateLimitFilter;
+    }
+
     /**
      * Security configuration when security is ENABLED.
      * Requires JWT authentication for protected endpoints.
@@ -41,6 +49,8 @@ public class SecurityConfig {
     @ConditionalOnProperty(name = "security.enabled", havingValue = "true", matchIfMissing = true)
     public SecurityFilterChain securedFilterChain(HttpSecurity http) throws Exception {
         http
+            // Add per-user rate limiting filter
+            .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
             // Disable CSRF for stateless API
             .csrf(AbstractHttpConfigurer::disable)
 

@@ -1,5 +1,6 @@
 package com.bmc.rag.vectorization.tika;
 
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
@@ -9,6 +10,7 @@ import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
 import org.apache.tika.sax.BodyContentHandler;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.xml.sax.SAXException;
 
@@ -17,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.*;
 
 /**
  * Apache Tika-based attachment parser for extracting text from various document formats.
@@ -28,9 +31,17 @@ public class AttachmentParser {
 
     private final Tika tika;
     private final Parser parser;
+    private final ExecutorService executorService;
 
     // Maximum content length to extract (10MB of text)
     private static final int MAX_CONTENT_LENGTH = 10 * 1024 * 1024;
+
+    // Maximum file size to process (50MB) - P1.3
+    private static final long MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
+    // Parsing timeout in seconds - P1.3
+    @Value("${tika.timeout-seconds:60}")
+    private int timeoutSeconds = 60;
 
     // Supported MIME types for text extraction
     private static final Set<String> SUPPORTED_MIME_TYPES = Set.of(
@@ -54,16 +65,46 @@ public class AttachmentParser {
     public AttachmentParser() {
         this.tika = new Tika();
         this.parser = new AutoDetectParser();
+        // Single-threaded executor for timeout control - P1.3
+        this.executorService = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "tika-parser");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     /**
-     * Parse a file and extract text content.
+     * Cleanup executor service on shutdown.
+     */
+    @PreDestroy
+    public void shutdown() {
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Parse a file and extract text content with timeout protection.
      *
      * @param filePath Path to the file
-     * @return Extracted text, or empty optional if parsing fails
+     * @return Extracted text, or empty optional if parsing fails or times out
      */
     public Optional<ParsedContent> parse(Path filePath) {
         try {
+            // Check file size before processing - P1.3
+            long fileSize = Files.size(filePath);
+            if (fileSize > MAX_FILE_SIZE_BYTES) {
+                log.warn("File {} exceeds maximum size limit ({} bytes > {} bytes)",
+                    filePath.getFileName(), fileSize, MAX_FILE_SIZE_BYTES);
+                return Optional.empty();
+            }
+
             // Detect MIME type
             String mimeType = tika.detect(filePath);
             log.debug("Detected MIME type for {}: {}", filePath.getFileName(), mimeType);
@@ -73,9 +114,9 @@ public class AttachmentParser {
                 return Optional.empty();
             }
 
-            // Parse content
+            // Parse content with timeout - P1.3
             try (InputStream inputStream = Files.newInputStream(filePath)) {
-                return parse(inputStream, filePath.getFileName().toString(), mimeType);
+                return parseWithTimeout(inputStream, filePath.getFileName().toString(), mimeType);
             }
         } catch (IOException e) {
             log.error("Failed to read file {}: {}", filePath, e.getMessage());
@@ -84,7 +125,32 @@ public class AttachmentParser {
     }
 
     /**
-     * Parse an input stream and extract text content.
+     * Parse with timeout protection to handle corrupt files - P1.3.
+     */
+    private Optional<ParsedContent> parseWithTimeout(InputStream inputStream, String filename, String mimeType) {
+        Future<Optional<ParsedContent>> future = executorService.submit(() ->
+            parseInternal(inputStream, filename, mimeType)
+        );
+
+        try {
+            return future.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            log.error("Parsing timed out after {} seconds for file: {}", timeoutSeconds, filename);
+            return Optional.empty();
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            log.error("Parsing interrupted for file: {}", filename);
+            return Optional.empty();
+        } catch (ExecutionException e) {
+            log.error("Parsing failed for file {}: {}", filename, e.getCause().getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Parse an input stream and extract text content with timeout.
      *
      * @param inputStream The input stream
      * @param filename Original filename (for metadata)
@@ -92,14 +158,22 @@ public class AttachmentParser {
      * @return Extracted text, or empty optional if parsing fails
      */
     public Optional<ParsedContent> parse(InputStream inputStream, String filename, String mimeType) {
+        return parseWithTimeout(inputStream, filename, mimeType);
+    }
+
+    /**
+     * Internal parse method called within executor service.
+     */
+    private Optional<ParsedContent> parseInternal(InputStream inputStream, String filename, String mimeType) {
         try {
             // Detect MIME type if not provided
-            if (mimeType == null) {
-                mimeType = tika.detect(inputStream, filename);
+            String detectedMimeType = mimeType;
+            if (detectedMimeType == null) {
+                detectedMimeType = tika.detect(inputStream, filename);
             }
 
-            if (!isSupportedMimeType(mimeType)) {
-                log.debug("Unsupported MIME type for {}: {}", filename, mimeType);
+            if (!isSupportedMimeType(detectedMimeType)) {
+                log.debug("Unsupported MIME type for {}: {}", filename, detectedMimeType);
                 return Optional.empty();
             }
 
@@ -126,7 +200,7 @@ public class AttachmentParser {
 
             ParsedContent content = new ParsedContent(
                 text,
-                mimeType,
+                detectedMimeType,
                 filename,
                 metadata.get("dc:title"),
                 metadata.get("dc:creator"),

@@ -55,12 +55,15 @@ public class ChatController {
         // Build user context for ReBAC
         UserContext userContext = buildUserContext(request);
 
-        // Process the chat request
+        // Process the chat request with agentic support
         RagAssistantService.ChatResponse serviceResponse;
         if (request.isSkipContext()) {
             serviceResponse = ragAssistantService.chatWithoutContext(sessionId, request.getQuestion());
         } else {
-            serviceResponse = ragAssistantService.chat(sessionId, request.getQuestion(), userContext);
+            // Use chatWithAgenticSupport to enable agentic operations (Section 12)
+            String userId = request.getUserId() != null ? request.getUserId() : "session:" + sessionId;
+            serviceResponse = ragAssistantService.chatWithAgenticSupport(
+                sessionId, request.getQuestion(), userId, userContext);
         }
 
         // Build and return response

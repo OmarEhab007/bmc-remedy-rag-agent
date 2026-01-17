@@ -192,6 +192,62 @@ public class IncidentExtractor {
     }
 
     /**
+     * Check which incident numbers from the provided list still exist in Remedy.
+     *
+     * @param incidentNumbers List of incident numbers to check
+     * @return Set of incident numbers that still exist
+     */
+    public Set<String> checkExistence(List<String> incidentNumbers) {
+        if (incidentNumbers == null || incidentNumbers.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return arContext.executeWithRetry(ctx -> {
+            Set<String> existingIds = new HashSet<>();
+
+            // Build OR qualification for all incident numbers
+            StringBuilder orQualification = new StringBuilder();
+            for (int i = 0; i < incidentNumbers.size(); i++) {
+                if (i > 0) orQualification.append(" OR ");
+                orQualification.append("'")
+                    .append(FieldIdConstants.Incident.INCIDENT_NUMBER)
+                    .append("' = \"")
+                    .append(incidentNumbers.get(i).replace("\"", "\\\""))
+                    .append("\"");
+            }
+
+            QualifierInfo qualifierInfo = QualifierBuilder.parseQualification(
+                ctx, FORM_NAME, orQualification.toString());
+            OutputInteger numMatches = new OutputInteger();
+
+            // Only fetch the incident number field
+            int[] fieldIds = { FieldIdConstants.Incident.INCIDENT_NUMBER };
+
+            List<Entry> entries = ctx.getListEntryObjects(
+                FORM_NAME,
+                qualifierInfo,
+                0,
+                incidentNumbers.size(),
+                null,
+                fieldIds,
+                false,
+                numMatches
+            );
+
+            if (entries != null) {
+                for (Entry entry : entries) {
+                    Value value = entry.get(FieldIdConstants.Incident.INCIDENT_NUMBER);
+                    if (value != null && value.getValue() != null) {
+                        existingIds.add(value.getValue().toString());
+                    }
+                }
+            }
+
+            return existingIds;
+        });
+    }
+
+    /**
      * Get the count of incidents matching a qualification.
      *
      * @param qualification Remedy qualification string

@@ -145,11 +145,24 @@ public class VectorStoreService {
      * @return List of search results
      */
     public List<SearchResult> search(String query, int maxResults, float minScore) {
+        log.debug("Searching for query: '{}' with maxResults={}, minScore={}",
+            query.length() > 100 ? query.substring(0, 100) + "..." : query, maxResults, minScore);
+
         float[] queryEmbedding = embeddingService.embed(query);
         String embeddingStr = formatEmbedding(queryEmbedding);
 
         List<Object[]> results = embeddingRepository.searchSimilar(embeddingStr, maxResults, minScore);
-        return mapSearchResults(results);
+        List<SearchResult> searchResults = mapSearchResults(results);
+
+        log.debug("Search returned {} results", searchResults.size());
+        if (searchResults.isEmpty()) {
+            long totalEmbeddings = embeddingRepository.count();
+            log.warn("No search results found. Total embeddings in store: {}. " +
+                    "If total is 0, run data sync first. If total > 0, query may not match any content above minScore={}",
+                totalEmbeddings, minScore);
+        }
+
+        return searchResults;
     }
 
     /**
@@ -167,6 +180,10 @@ public class VectorStoreService {
             float minScore,
             List<String> allowedGroups) {
 
+        log.debug("Searching with groups filter: query='{}', maxResults={}, minScore={}, groups={}",
+            query.length() > 100 ? query.substring(0, 100) + "..." : query,
+            maxResults, minScore, allowedGroups);
+
         float[] queryEmbedding = embeddingService.embed(query);
         String embeddingStr = formatEmbedding(queryEmbedding);
         String groupsArray = formatPostgresArray(allowedGroups);
@@ -174,7 +191,17 @@ public class VectorStoreService {
         List<Object[]> results = embeddingRepository.searchSimilarWithGroups(
             embeddingStr, maxResults, minScore, groupsArray
         );
-        return mapSearchResults(results);
+        List<SearchResult> searchResults = mapSearchResults(results);
+
+        log.debug("Search with groups returned {} results", searchResults.size());
+        if (searchResults.isEmpty()) {
+            long totalEmbeddings = embeddingRepository.count();
+            log.warn("No results with group filter. Total embeddings: {}. Groups: {}. " +
+                    "Check if embeddings have assigned_group metadata matching user groups.",
+                totalEmbeddings, allowedGroups);
+        }
+
+        return searchResults;
     }
 
     /**
@@ -203,6 +230,20 @@ public class VectorStoreService {
     }
 
     /**
+     * Perform semantic search filtered by a single source type.
+     * Convenience method for agentic operations (Section 12).
+     *
+     * @param query The search query
+     * @param sourceType Single source type to filter (e.g., "Incident", "WorkOrder")
+     * @param maxResults Maximum number of results
+     * @param minScore Minimum similarity score (0-1)
+     * @return List of search results
+     */
+    public List<SearchResult> searchByType(String query, String sourceType, int maxResults, double minScore) {
+        return searchBySourceTypes(query, maxResults, (float) minScore, List.of(sourceType));
+    }
+
+    /**
      * Get statistics about stored embeddings.
      */
     public Map<String, Long> getStatistics() {
@@ -213,6 +254,23 @@ public class VectorStoreService {
         stats.put("knowledgeArticles", embeddingRepository.countBySourceType("KnowledgeArticle"));
         stats.put("changeRequests", embeddingRepository.countBySourceType("ChangeRequest"));
         return stats;
+    }
+
+    /**
+     * Get all source IDs grouped by source type.
+     * Used for hard-delete detection (P1.2).
+     */
+    public Map<String, Set<String>> getAllSourceIdsByType() {
+        Map<String, Set<String>> result = new HashMap<>();
+
+        List<String> sourceTypes = List.of("Incident", "WorkOrder", "KnowledgeArticle", "ChangeRequest");
+
+        for (String sourceType : sourceTypes) {
+            List<String> ids = embeddingRepository.findDistinctSourceIdsBySourceType(sourceType);
+            result.put(sourceType, new HashSet<>(ids));
+        }
+
+        return result;
     }
 
     /**

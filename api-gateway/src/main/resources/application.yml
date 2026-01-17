@@ -93,11 +93,11 @@ zai:
 # =============================================================================
 rag:
   max-results: ${RAG_MAX_RESULTS:5}
-  min-score: ${RAG_MIN_SCORE:0.5}
+  min-score: ${RAG_MIN_SCORE:0.3}
   max-memory-messages: 20
   include-citations: true
   prioritize-knowledge-articles: true
-  rebac-enabled: ${RAG_REBAC_ENABLED:true}
+  rebac-enabled: ${RAG_REBAC_ENABLED:false}
   system-prompt: |
     أنت "دعمي" (Damee)، المساعد التقني الذكي لهيئة الاتصالات والفضاء والتقنية (CST).
     You are "Damee" (دعمي), the intelligent IT support assistant for the Communications, Space & Technology Commission (CST).
@@ -169,6 +169,27 @@ rag:
     4. Change Requests (CR) - System context
 
 # =============================================================================
+# Agentic Operations Configuration (Section 12)
+# =============================================================================
+agentic:
+  enabled: ${AGENTIC_ENABLED:false}  # Disabled by default for safety
+  confirmation:
+    timeout-minutes: ${AGENTIC_CONFIRMATION_TIMEOUT:5}
+    require-confirmation: true  # Always require user confirmation
+    max-pending-per-session: 5
+  rate-limit:
+    enabled: true
+    max-creations-per-hour: ${AGENTIC_MAX_CREATIONS:10}
+  duplicate-detection:
+    similarity-threshold: 0.85
+    block-on-duplicate: false  # Warn only, don't block
+    max-duplicates-to-check: 5
+  audit:
+    enabled: true
+    include-payloads: false  # Don't log request payloads (may contain sensitive data)
+    retention-days: 90
+
+# =============================================================================
 # Sync Configuration
 # =============================================================================
 sync:
@@ -186,6 +207,20 @@ spring.security.oauth2.resourceserver.jwt:
   # issuer-uri: ${JWT_ISSUER_URI:}
   # Option 2: Direct JWKS endpoint
   jwk-set-uri: ${JWT_JWK_SET_URI:}
+
+# =============================================================================
+# Microsoft Teams Bot Integration (P3.8)
+# =============================================================================
+teams:
+  bot:
+    enabled: ${TEAMS_BOT_ENABLED:false}
+    app-id: ${TEAMS_BOT_APP_ID:}
+    app-password: ${TEAMS_BOT_APP_PASSWORD:}
+    tenant-id: ${TEAMS_BOT_TENANT_ID:}
+    display-name: BMC Remedy RAG Assistant
+    max-message-length: 4000
+    include-citations: true
+    show-confidence: true
 
 # =============================================================================
 # Rate Limiting Configuration (Resilience4j)
@@ -206,6 +241,28 @@ resilience4j:
         limit-for-period: 10
         limit-refresh-period: 1m
         timeout-duration: 0s
+      feedback:
+        limit-for-period: 50
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+      action:
+        limit-for-period: 10
+        limit-refresh-period: 1h
+        timeout-duration: 0s
+        register-health-indicator: true
+
+# Custom rate limit settings (Bucket4j per-user)
+rate-limit:
+  chat:
+    requests-per-minute: 50
+  search:
+    requests-per-minute: 100
+  admin:
+    requests-per-minute: 20
+  feedback:
+    requests-per-minute: 30
+  action:
+    requests-per-hour: 10
 
 # =============================================================================
 # Logging Configuration
@@ -214,6 +271,8 @@ logging:
   level:
     root: INFO
     com.bmc.rag: INFO
+    com.bmc.rag.agent.retrieval: DEBUG
+    com.bmc.rag.store.service: DEBUG
     org.springframework.web: INFO
     org.springframework.security: INFO
     org.hibernate.SQL: WARN

@@ -185,6 +185,62 @@ public class ChangeRequestExtractor {
     }
 
     /**
+     * Check which change IDs from the provided list still exist in Remedy.
+     *
+     * @param changeIds List of change IDs to check
+     * @return Set of change IDs that still exist
+     */
+    public Set<String> checkExistence(List<String> changeIds) {
+        if (changeIds == null || changeIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return arContext.executeWithRetry(ctx -> {
+            Set<String> existingIds = new HashSet<>();
+
+            // Build OR qualification for all change IDs
+            StringBuilder orQualification = new StringBuilder();
+            for (int i = 0; i < changeIds.size(); i++) {
+                if (i > 0) orQualification.append(" OR ");
+                orQualification.append("'")
+                    .append(FieldIdConstants.ChangeRequest.CHANGE_ID)
+                    .append("' = \"")
+                    .append(changeIds.get(i).replace("\"", "\\\""))
+                    .append("\"");
+            }
+
+            QualifierInfo qualifierInfo = QualifierBuilder.parseQualification(
+                ctx, FORM_NAME, orQualification.toString());
+            OutputInteger numMatches = new OutputInteger();
+
+            // Only fetch the change ID field
+            int[] fieldIds = { FieldIdConstants.ChangeRequest.CHANGE_ID };
+
+            List<Entry> entries = ctx.getListEntryObjects(
+                FORM_NAME,
+                qualifierInfo,
+                0,
+                changeIds.size(),
+                null,
+                fieldIds,
+                false,
+                numMatches
+            );
+
+            if (entries != null) {
+                for (Entry entry : entries) {
+                    Value value = entry.get(FieldIdConstants.ChangeRequest.CHANGE_ID);
+                    if (value != null && value.getValue() != null) {
+                        existingIds.add(value.getValue().toString());
+                    }
+                }
+            }
+
+            return existingIds;
+        });
+    }
+
+    /**
      * Map a Remedy Entry to a ChangeRequestRecord.
      */
     private ChangeRequestRecord mapEntryToChangeRequest(Entry entry) {

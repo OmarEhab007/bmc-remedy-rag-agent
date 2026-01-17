@@ -1,35 +1,74 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '../types/chat';
-import { CitationBlock, InlineCitation } from './CitationBlock';
+import { InlineCitation } from './CitationBlock';
 import { Avatar } from './Avatar';
 import { MessageActions } from './MessageActions';
-import { FeedbackButtons } from './FeedbackButtons';
+import { MessageFooter } from './MessageFooter';
 import { CodeBlock } from './CodeBlock';
+import { ConfirmationPrompt } from './ConfirmationPrompt';
 import type { TextSegment } from '../utils/incidentParser';
 import { parseTextWithReferences } from '../utils/incidentParser';
+import { isConfirmationPrompt, parseActionId } from '../services/actionsApi';
 
 interface MessageBubbleProps {
   message: ChatMessage;
   userName?: string;
+  sessionId?: string;
   onRegenerate?: () => void;
   onEdit?: (content: string) => void;
   onDelete?: () => void;
+  onActionConfirmed?: (result: { success: boolean; message: string; recordId?: string }) => void;
+  onActionCancelled?: () => void;
 }
 
 export function MessageBubble({
   message,
   userName,
+  sessionId,
   onRegenerate,
   onEdit,
   onDelete,
+  onActionConfirmed,
+  onActionCancelled,
 }: MessageBubbleProps) {
   const { t } = useTranslation();
   const isUser = message.role === 'user';
   const isStreaming = message.isStreaming;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
+  const [actionHandled, setActionHandled] = useState(false);
+
+  // Check if this message contains a confirmation prompt
+  const hasConfirmationPrompt = useMemo(() => {
+    if (isUser || isStreaming || actionHandled) return false;
+    return message.pendingAction || isConfirmationPrompt(message.content);
+  }, [isUser, isStreaming, actionHandled, message.pendingAction, message.content]);
+
+  // Parse action ID from content if not provided in pendingAction
+  // This can be used for inline confirmation buttons in the future
+  const _detectedActionId = useMemo(() => {
+    if (message.pendingAction?.actionId) return message.pendingAction.actionId;
+    if (hasConfirmationPrompt) return parseActionId(message.content);
+    return null;
+  }, [message.pendingAction, hasConfirmationPrompt, message.content]);
+  void _detectedActionId; // Suppress unused warning - reserved for future use
+
+  // Handle action confirmed
+  const handleActionConfirmed = useCallback(
+    (result: { success: boolean; message: string; recordId?: string }) => {
+      setActionHandled(true);
+      onActionConfirmed?.(result);
+    },
+    [onActionConfirmed]
+  );
+
+  // Handle action cancelled
+  const handleActionCancelled = useCallback(() => {
+    setActionHandled(true);
+    onActionCancelled?.();
+  }, [onActionCancelled]);
 
   const formattedTime = useMemo(() => {
     return message.timestamp.toLocaleTimeString([], {
@@ -120,34 +159,43 @@ export function MessageBubble({
                   </div>
                 )}
 
-                {/* Citations */}
-                {message.citations && message.citations.length > 0 && (
-                  <CitationBlock citations={message.citations} />
+                {/* Confirmation prompt for agentic actions */}
+                {hasConfirmationPrompt && sessionId && message.pendingAction && (
+                  <ConfirmationPrompt
+                    action={message.pendingAction}
+                    sessionId={sessionId}
+                    onConfirmed={handleActionConfirmed}
+                    onCancelled={handleActionCancelled}
+                  />
                 )}
 
-                {/* Footer: timestamp, confidence, actions */}
-                <div className="flex items-center justify-between mt-3 pt-2">
-                  <div className="flex items-center gap-3 text-xs text-muted">
-                    <span>{formattedTime}</span>
-                    {message.confidenceScore !== undefined && (
-                      <ConfidenceIndicator score={message.confidenceScore} />
-                    )}
+                {/* Action handled indicator */}
+                {actionHandled && (
+                  <div className="mt-3 p-2 rounded-lg text-sm text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20">
+                    {t('actions.handled', 'Action has been processed.')}
                   </div>
+                )}
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
-                    <MessageActions
-                      role="assistant"
-                      content={message.content}
-                      onRegenerate={onRegenerate}
-                      onEdit={undefined}
-                      onDelete={onDelete}
-                    />
-                    {!isStreaming && (
-                      <FeedbackButtons messageId={message.id} />
-                    )}
-                  </div>
+                {/* Message Actions (regenerate, copy, delete) */}
+                <div className="flex justify-end mt-2">
+                  <MessageActions
+                    role="assistant"
+                    content={message.content}
+                    onRegenerate={onRegenerate}
+                    onEdit={undefined}
+                    onDelete={onDelete}
+                  />
                 </div>
+
+                {/* Citations, timestamp, confidence, feedback */}
+                {!isStreaming && (
+                  <MessageFooter
+                    citations={message.citations}
+                    confidenceScore={message.confidenceScore}
+                    timestamp={message.timestamp}
+                    messageId={message.id}
+                  />
+                )}
               </>
             )}
           </div>
@@ -223,33 +271,16 @@ export function MessageBubble({
               </div>
             )}
 
-            {/* Citations */}
-            {!isUser && message.citations && message.citations.length > 0 && (
-              <CitationBlock citations={message.citations} />
-            )}
-
-            {/* Footer: timestamp, confidence, actions */}
+            {/* Footer: timestamp and actions for user messages */}
             <div className="flex items-center justify-between mt-3 pt-2">
-              <div className="flex items-center gap-3 text-xs text-muted">
-                <span>{formattedTime}</span>
-                {!isUser && message.confidenceScore !== undefined && (
-                  <ConfidenceIndicator score={message.confidenceScore} />
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-2">
-                <MessageActions
-                  role={isUser ? 'user' : 'assistant'}
-                  content={message.content}
-                  onRegenerate={!isUser ? onRegenerate : undefined}
-                  onEdit={isUser && onEdit ? handleEdit : undefined}
-                  onDelete={onDelete}
-                />
-                {!isUser && !isStreaming && (
-                  <FeedbackButtons messageId={message.id} />
-                )}
-              </div>
+              <span className="text-xs text-muted">{formattedTime}</span>
+              <MessageActions
+                role="user"
+                content={message.content}
+                onRegenerate={undefined}
+                onEdit={onEdit ? handleEdit : undefined}
+                onDelete={onDelete}
+              />
             </div>
           </>
         )}
@@ -338,39 +369,3 @@ function MessageSegment({ segment }: MessageSegmentProps) {
   );
 }
 
-interface ConfidenceIndicatorProps {
-  score: number;
-}
-
-function ConfidenceIndicator({ score }: ConfidenceIndicatorProps) {
-  const { t } = useTranslation();
-  const percentage = Math.round(score * 100);
-  let colorClass = 'text-success';
-  let label = t('messages.highConfidence');
-
-  if (score < 0.5) {
-    colorClass = 'text-error';
-    label = t('messages.lowConfidence');
-  } else if (score < 0.75) {
-    colorClass = 'text-warning';
-    label = t('messages.mediumConfidence');
-  }
-
-  return (
-    <span className={`flex items-center gap-1 ${colorClass}`} title={label}>
-      <svg
-        className="w-3 h-3"
-        fill="currentColor"
-        viewBox="0 0 20 20"
-        aria-hidden="true"
-      >
-        <path
-          fillRule="evenodd"
-          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
-          clipRule="evenodd"
-        />
-      </svg>
-      <span>{percentage}%</span>
-    </span>
-  );
-}

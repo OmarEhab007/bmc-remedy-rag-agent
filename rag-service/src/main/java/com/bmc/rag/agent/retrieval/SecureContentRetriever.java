@@ -40,19 +40,22 @@ public class SecureContentRetriever {
         log.info("Retrieving content for query: '{}' with maxResults={}, minScore={}",
             truncateForLog(query), ragConfig.getMaxResults(), ragConfig.getMinScore());
 
-        // Perform vector search
+        // Perform vector search with ATOMIC ReBAC filtering at database level (P0.3)
+        // This prevents race condition where unauthorized data could be seen during post-filtering
         List<SearchResult> rawResults;
 
         if (ragConfig.isRebacEnabled() && userContext != null && userContext.hasGroups()) {
-            // Use database-level group filtering for efficiency
+            // ATOMIC: ReBAC filtering happens IN the database query, not post-query
+            // This is the ONLY correct way to implement ReBAC - never fetch unauthorized data
             rawResults = vectorStoreService.searchWithGroups(
                 query,
-                ragConfig.getMaxResults() * 2,  // Fetch more for post-filtering
+                ragConfig.getMaxResults(),  // No need for extra fetch - filtering is atomic
                 ragConfig.getMinScore(),
                 userContext.getGroupsAsList()
             );
+            log.debug("Atomic ReBAC search completed with {} groups", userContext.groups().size());
         } else {
-            // No ReBAC filtering
+            // No ReBAC filtering required
             rawResults = vectorStoreService.search(
                 query,
                 ragConfig.getMaxResults(),
@@ -60,7 +63,7 @@ public class SecureContentRetriever {
             );
         }
 
-        log.info("Vector search returned {} raw results (rebacEnabled={})", rawResults.size(), ragConfig.isRebacEnabled());
+        log.info("Vector search returned {} results (rebacEnabled={})", rawResults.size(), ragConfig.isRebacEnabled());
 
         // Log details of each result for debugging
         for (SearchResult r : rawResults) {
@@ -69,40 +72,37 @@ public class SecureContentRetriever {
         }
 
         if (rawResults.isEmpty()) {
-            log.info("No results found for query - check if embeddings are properly generated");
+            log.warn("NO RESULTS FOUND for query: '{}'. Diagnostics: minScore={}, userGroups={}, rebacEnabled={}. " +
+                    "Possible causes: (1) No embeddings in vector store, (2) Query doesn't match any content above minScore threshold, " +
+                    "(3) ReBAC filtering removed all results. Try lowering min-score or check embedding_store table.",
+                truncateForLog(query), ragConfig.getMinScore(),
+                userContext != null ? userContext.groups() : "null", ragConfig.isRebacEnabled());
             return RetrievalResult.empty();
         }
 
-        // Apply additional filtering and prioritization
+        // Apply ONLY deduplication and prioritization (NOT security filtering - that was atomic at DB level)
         List<SearchResult> filtered;
-        if (ragConfig.isRebacEnabled()) {
-            // Apply ReBAC filtering when enabled
-            filtered = rebacFilter.applyAllFilters(
-                rawResults,
-                userContext != null ? userContext.groups() : Collections.emptySet(),
-                ragConfig.isPrioritizeKnowledgeArticles(),
-                true  // deduplicate
-            );
-        } else {
-            // Skip ReBAC filtering - only apply prioritization and deduplication
-            log.debug("ReBAC disabled - skipping group filtering");
-            filtered = rebacFilter.prioritizeHighValueChunks(rawResults);
-            filtered = rebacFilter.deduplicateBySource(filtered);
-            if (ragConfig.isPrioritizeKnowledgeArticles()) {
-                // Manually prioritize knowledge articles
-                List<SearchResult> ka = new ArrayList<>();
-                List<SearchResult> other = new ArrayList<>();
-                for (SearchResult r : filtered) {
-                    if ("KnowledgeArticle".equals(r.getSourceType())) {
-                        ka.add(r);
-                    } else {
-                        other.add(r);
-                    }
+
+        // Prioritize high-value chunks (resolution, summary)
+        filtered = rebacFilter.prioritizeHighValueChunks(rawResults);
+
+        // Deduplicate by source to avoid showing same incident multiple times
+        filtered = rebacFilter.deduplicateBySource(filtered);
+
+        // Prioritize knowledge articles if configured
+        if (ragConfig.isPrioritizeKnowledgeArticles()) {
+            List<SearchResult> ka = new ArrayList<>();
+            List<SearchResult> other = new ArrayList<>();
+            for (SearchResult r : filtered) {
+                if ("KnowledgeArticle".equals(r.getSourceType())) {
+                    ka.add(r);
+                } else {
+                    other.add(r);
                 }
-                filtered = new ArrayList<>();
-                filtered.addAll(ka);
-                filtered.addAll(other);
             }
+            filtered = new ArrayList<>();
+            filtered.addAll(ka);
+            filtered.addAll(other);
         }
 
         // Limit to max results
@@ -110,7 +110,7 @@ public class SecureContentRetriever {
             filtered = filtered.subList(0, ragConfig.getMaxResults());
         }
 
-        log.info("Returning {} results after filtering", filtered.size());
+        log.info("Returning {} results after prioritization/deduplication", filtered.size());
 
         return buildRetrievalResult(filtered);
     }
@@ -303,13 +303,31 @@ public class SecureContentRetriever {
         }
 
         /**
-         * Get all source references for citations.
+         * Get all source references for citations (simple string format).
          */
         public List<String> getSourceReferences() {
             if (documents == null) return Collections.emptyList();
             return documents.stream()
                 .map(RetrievedDocument::getSourceReference)
                 .distinct()
+                .collect(Collectors.toList());
+        }
+
+        /**
+         * Get all documents for full citation details including scores.
+         */
+        public List<RetrievedDocument> getDocumentsForCitations() {
+            if (documents == null) return Collections.emptyList();
+            // Return unique documents by sourceId
+            return documents.stream()
+                .collect(Collectors.toMap(
+                    RetrievedDocument::sourceId,
+                    doc -> doc,
+                    (existing, replacement) -> existing.score() >= replacement.score() ? existing : replacement
+                ))
+                .values()
+                .stream()
+                .sorted((a, b) -> Float.compare(b.score(), a.score())) // Highest score first
                 .collect(Collectors.toList());
         }
     }

@@ -142,5 +142,21 @@
   },
   "accessibility": {
     "skipToMainContent": "تخطي إلى المحتوى الرئيسي"
+  },
+  "actions": {
+    "confirmationRequired": "مطلوب التأكيد",
+    "createIncident": "إنشاء حادثة",
+    "createWorkOrder": "إنشاء أمر عمل",
+    "expiresIn": "ينتهي خلال",
+    "expired": "انتهت صلاحية هذا الإجراء. يرجى طلب إجراء جديد.",
+    "confirming": "جارٍ التأكيد...",
+    "handled": "تم معالجة الإجراء.",
+    "confirmSuccess": "تم تأكيد الإجراء بنجاح!",
+    "confirmError": "فشل تأكيد الإجراء",
+    "cancelSuccess": "تم إلغاء الإجراء",
+    "cancelError": "فشل إلغاء الإجراء",
+    "rateLimitExceeded": "تم تجاوز الحد الأقصى. يرجى الانتظار قبل إنشاء المزيد من التذاكر.",
+    "pendingActions": "الإجراءات المعلقة",
+    "noPendingActions": "لا توجد إجراءات معلقة"
   }
 }

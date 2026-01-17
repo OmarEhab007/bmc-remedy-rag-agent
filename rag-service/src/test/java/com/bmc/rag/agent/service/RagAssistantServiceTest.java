@@ -1,5 +1,6 @@
 package com.bmc.rag.agent.service;
 
+import com.bmc.rag.agent.config.AgenticConfig;
 import com.bmc.rag.agent.config.RagConfig;
 import com.bmc.rag.agent.config.ZaiConfig;
 import com.bmc.rag.agent.memory.PostgresChatMemoryStore;
@@ -45,6 +46,9 @@ class RagAssistantServiceTest {
     @Mock
     private ZaiConfig zaiConfig;
 
+    @Mock
+    private AgenticConfig agenticConfig;
+
     private RagAssistantService ragAssistantService;
 
     @BeforeEach
@@ -52,6 +56,7 @@ class RagAssistantServiceTest {
         // This stubbing is used when getOrCreateMemory is called internally
         when(ragConfig.getMaxMemoryMessages()).thenReturn(20);
         when(zaiConfig.isThinkingEnabled()).thenReturn(false);
+        when(agenticConfig.isEnabled()).thenReturn(false);
 
         ragAssistantService = new RagAssistantService(
             chatModel,
@@ -59,7 +64,8 @@ class RagAssistantServiceTest {
             contentRetriever,
             chatMemoryStore,
             ragConfig,
-            zaiConfig
+            zaiConfig,
+            agenticConfig
         );
     }
 

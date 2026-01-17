@@ -166,13 +166,13 @@ public class WebSocketChatController {
             // Completion handler
             new RagAssistantService.StreamingCompletionHandler() {
                 @Override
-                public void onComplete(List<String> sources, Double confidence) {
+                public void onComplete(List<com.bmc.rag.agent.retrieval.SecureContentRetriever.RetrievedDocument> documents, Double confidence) {
                     sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
                         .messageId(message.getMessageId())
                         .sessionId(sessionId)
                         .type(ChunkType.COMPLETE)
                         .isComplete(true)
-                        .citations(buildCitations(sources))
+                        .citations(buildCitationsFromDocuments(documents))
                         .confidenceScore(confidence)
                         .build());
                 }
@@ -216,37 +216,21 @@ public class WebSocketChatController {
     }
 
     /**
-     * Build citations from source references.
+     * Build citations from retrieved documents with full score information.
      */
-    private List<Citation> buildCitationsFromSources(List<String> sources) {
-        if (sources == null || sources.isEmpty()) {
+    private List<Citation> buildCitationsFromDocuments(
+            List<com.bmc.rag.agent.retrieval.SecureContentRetriever.RetrievedDocument> documents) {
+        if (documents == null || documents.isEmpty()) {
             return Collections.emptyList();
         }
 
-        return sources.stream()
-            .map(source -> {
-                // Parse source reference (format: "TYPE: ID - Title")
-                String[] parts = source.split(":", 2);
-                String type = parts.length > 0 ? parts[0].trim() : "UNKNOWN";
-                String idAndTitle = parts.length > 1 ? parts[1].trim() : source;
-
-                String[] idParts = idAndTitle.split("-", 2);
-                String id = idParts.length > 0 ? idParts[0].trim() : "";
-                String title = idParts.length > 1 ? idParts[1].trim() : "";
-
-                return Citation.builder()
-                    .sourceType(type)
-                    .sourceId(id)
-                    .title(title)
-                    .build();
-            })
+        return documents.stream()
+            .map(doc -> Citation.builder()
+                .sourceType(doc.sourceType())
+                .sourceId(doc.sourceId())
+                .title(doc.title() != null ? doc.title() : "")
+                .score((double) doc.score())
+                .build())
             .toList();
-    }
-
-    /**
-     * Build citations from retrieval results.
-     */
-    private List<Citation> buildCitations(List<String> sources) {
-        return buildCitationsFromSources(sources);
     }
 }

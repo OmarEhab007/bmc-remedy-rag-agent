@@ -162,6 +162,62 @@ public class WorkOrderExtractor {
     }
 
     /**
+     * Check which work order IDs from the provided list still exist in Remedy.
+     *
+     * @param workOrderIds List of work order IDs to check
+     * @return Set of work order IDs that still exist
+     */
+    public Set<String> checkExistence(List<String> workOrderIds) {
+        if (workOrderIds == null || workOrderIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return arContext.executeWithRetry(ctx -> {
+            Set<String> existingIds = new HashSet<>();
+
+            // Build OR qualification for all work order IDs
+            StringBuilder orQualification = new StringBuilder();
+            for (int i = 0; i < workOrderIds.size(); i++) {
+                if (i > 0) orQualification.append(" OR ");
+                orQualification.append("'")
+                    .append(FieldIdConstants.WorkOrder.WORK_ORDER_ID)
+                    .append("' = \"")
+                    .append(workOrderIds.get(i).replace("\"", "\\\""))
+                    .append("\"");
+            }
+
+            QualifierInfo qualifierInfo = QualifierBuilder.parseQualification(
+                ctx, FORM_NAME, orQualification.toString());
+            OutputInteger numMatches = new OutputInteger();
+
+            // Only fetch the work order ID field
+            int[] fieldIds = { FieldIdConstants.WorkOrder.WORK_ORDER_ID };
+
+            List<Entry> entries = ctx.getListEntryObjects(
+                FORM_NAME,
+                qualifierInfo,
+                0,
+                workOrderIds.size(),
+                null,
+                fieldIds,
+                false,
+                numMatches
+            );
+
+            if (entries != null) {
+                for (Entry entry : entries) {
+                    Value value = entry.get(FieldIdConstants.WorkOrder.WORK_ORDER_ID);
+                    if (value != null && value.getValue() != null) {
+                        existingIds.add(value.getValue().toString());
+                    }
+                }
+            }
+
+            return existingIds;
+        });
+    }
+
+    /**
      * Map a Remedy Entry to a WorkOrderRecord.
      */
     private WorkOrderRecord mapEntryToWorkOrder(Entry entry) {

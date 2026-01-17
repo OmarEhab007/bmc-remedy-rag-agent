@@ -90,6 +90,7 @@ frontend.zip
 *.tar
 *.rar
 *.7z
+*.zip
 
 # Runtime data
 pids/
@@ -116,3 +117,11 @@ coverage/
 .worktrees/
 .security-key
 logs/security/
+
+Section_12_Agentic_Operations.txt
+ENHANCEMENT_SPEC.md
+DOCUMENTATION.md
+ticket-create.zip
+.specify/
+docs/
+ticket-create/

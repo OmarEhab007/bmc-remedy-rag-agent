@@ -399,6 +399,114 @@ public class IncrementalSyncService {
     }
 
     /**
+     * Detect and handle hard-deleted records (P1.2).
+     * Queries Remedy Audit form for DELETE operations and removes orphaned embeddings.
+     * This should be called periodically (e.g., weekly) as a reconciliation process.
+     */
+    @Transactional
+    public SyncResult handleHardDeletes() {
+        if (!remedyConfig.isEnabled()) {
+            return new SyncResult(0, 0, "Remedy connection disabled");
+        }
+
+        log.info("Starting hard-delete detection and cleanup");
+        int totalDeleted = 0;
+
+        try {
+            // Get all source IDs from vector store grouped by type
+            Map<String, Set<String>> vectorStoreIds = vectorStoreService.getAllSourceIdsByType();
+
+            // For each source type, check which IDs still exist in Remedy
+            for (String sourceType : vectorStoreIds.keySet()) {
+                Set<String> storedIds = vectorStoreIds.get(sourceType);
+                if (storedIds.isEmpty()) continue;
+
+                log.info("Checking {} {} records for deletion", storedIds.size(), sourceType);
+
+                Set<String> activeIds = getActiveRemedyIds(sourceType, storedIds);
+
+                // Find IDs that no longer exist in Remedy
+                Set<String> deletedIds = new HashSet<>(storedIds);
+                deletedIds.removeAll(activeIds);
+
+                if (!deletedIds.isEmpty()) {
+                    log.info("Found {} deleted {} records, removing embeddings", deletedIds.size(), sourceType);
+
+                    for (String deletedId : deletedIds) {
+                        vectorStoreService.deleteBySourceRecord(sourceType, deletedId);
+                        totalDeleted++;
+                    }
+                }
+            }
+
+            log.info("Hard-delete cleanup complete: removed {} orphaned embeddings", totalDeleted);
+            return new SyncResult(totalDeleted, 0);
+
+        } catch (Exception e) {
+            log.error("Hard-delete detection failed: {}", e.getMessage(), e);
+            return new SyncResult(0, 0, e.getMessage());
+        }
+    }
+
+    /**
+     * Get active Remedy record IDs for a given source type.
+     * Checks if records still exist in Remedy.
+     */
+    private Set<String> getActiveRemedyIds(String sourceType, Set<String> idsToCheck) {
+        // Convert to list for batching
+        List<String> idList = new ArrayList<>(idsToCheck);
+        Set<String> activeIds = new HashSet<>();
+
+        // Process in batches to avoid query size limits
+        int batchSize = 100;
+        for (int i = 0; i < idList.size(); i += batchSize) {
+            List<String> batch = idList.subList(i, Math.min(i + batchSize, idList.size()));
+
+            try {
+                Set<String> batchActiveIds = switch (sourceType) {
+                    case "Incident" -> incidentExtractor.checkExistence(batch);
+                    case "WorkOrder" -> workOrderExtractor.checkExistence(batch);
+                    case "KnowledgeArticle" -> knowledgeExtractor.checkExistence(batch);
+                    case "ChangeRequest" -> changeRequestExtractor.checkExistence(batch);
+                    default -> {
+                        log.warn("Unknown source type: {}", sourceType);
+                        yield Collections.emptySet();
+                    }
+                };
+                activeIds.addAll(batchActiveIds);
+            } catch (Exception e) {
+                log.warn("Failed to check existence for batch in {}: {}", sourceType, e.getMessage());
+                // On error, assume all IDs in batch are still active to avoid accidental deletion
+                activeIds.addAll(batch);
+            }
+        }
+
+        return activeIds;
+    }
+
+    /**
+     * Run weekly reconciliation to detect and remove orphaned embeddings.
+     * Scheduled to run every Sunday at 2 AM.
+     */
+    @Scheduled(cron = "${sync.hard-delete-cron:0 0 2 * * SUN}")
+    public void weeklyReconciliation() {
+        if (!remedyConfig.isEnabled()) {
+            log.debug("Remedy connection disabled, skipping weekly reconciliation");
+            return;
+        }
+
+        log.info("Starting weekly reconciliation for hard-delete detection");
+        SyncResult result = handleHardDeletes();
+
+        if (result.isSuccess()) {
+            log.info("Weekly reconciliation completed: {} orphaned embeddings removed",
+                result.recordsProcessed());
+        } else {
+            log.error("Weekly reconciliation failed: {}", result.errorMessage());
+        }
+    }
+
+    /**
      * Sync result record.
      */
     public record SyncResult(int recordsProcessed, int chunksCreated, String errorMessage) {

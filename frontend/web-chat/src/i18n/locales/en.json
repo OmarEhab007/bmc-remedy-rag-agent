@@ -142,5 +142,21 @@
   },
   "accessibility": {
     "skipToMainContent": "Skip to main content"
+  },
+  "actions": {
+    "confirmationRequired": "Confirmation Required",
+    "createIncident": "Create Incident",
+    "createWorkOrder": "Create Work Order",
+    "expiresIn": "Expires in",
+    "expired": "This action has expired. Please request a new one.",
+    "confirming": "Confirming...",
+    "handled": "Action has been processed.",
+    "confirmSuccess": "Action confirmed successfully!",
+    "confirmError": "Failed to confirm action",
+    "cancelSuccess": "Action cancelled",
+    "cancelError": "Failed to cancel action",
+    "rateLimitExceeded": "Rate limit exceeded. Please wait before creating more tickets.",
+    "pendingActions": "Pending Actions",
+    "noPendingActions": "No pending actions"
   }
 }

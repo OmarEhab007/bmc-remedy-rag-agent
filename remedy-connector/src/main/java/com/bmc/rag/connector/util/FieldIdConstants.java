@@ -201,6 +201,101 @@ public final class FieldIdConstants {
     }
 
     // ==========================================================================
+    // Write-Required Fields for Agentic Operations (Section 12)
+    // ==========================================================================
+    public static final class IncidentCreate {
+        /**
+         * Required fields for creating new incidents via HPD:Help Desk form.
+         * All fields use immutable Field IDs for stability across localization/upgrades.
+         */
+        public static final int SUMMARY = 1000000000;              // Required: Incident summary (max 255 chars)
+        public static final int DESCRIPTION = 1000000151;          // Required: Detailed description
+        public static final int IMPACT = 1000000163;               // Required: 1=Extensive, 2=Significant, 3=Moderate, 4=Minor
+        public static final int URGENCY = 1000000162;              // Required: 1=Critical, 2=High, 3=Medium, 4=Low
+        public static final int STATUS = 7;                        // Required: 0=New (default for new incidents)
+        public static final int REPORTED_SOURCE = 1000000215;      // Required: 4=Self-Service (agentic source)
+
+        // Optional fields commonly set during creation
+        public static final int CUSTOMER_FIRST_NAME = 1000000018;  // Optional: Requester first name
+        public static final int CUSTOMER_LAST_NAME = 1000000019;   // Optional: Requester last name
+        public static final int CUSTOMER_COMPANY = 1000000001;     // Optional: Requester company
+        public static final int CATEGORY_TIER_1 = 1000000063;      // Optional: Category tier 1
+        public static final int CATEGORY_TIER_2 = 1000000064;      // Optional: Category tier 2
+        public static final int CATEGORY_TIER_3 = 1000000065;      // Optional: Category tier 3
+        public static final int ASSIGNED_GROUP = 1000000217;       // Optional: Initial assignment group
+        public static final int SERVICE_TYPE = 1000000099;         // Optional: Service type
+
+        // Enum values for required fields
+        public static final class Impact {
+            public static final int EXTENSIVE = 1;
+            public static final int SIGNIFICANT = 2;
+            public static final int MODERATE = 3;
+            public static final int MINOR = 4;
+        }
+
+        public static final class Urgency {
+            public static final int CRITICAL = 1;
+            public static final int HIGH = 2;
+            public static final int MEDIUM = 3;
+            public static final int LOW = 4;
+        }
+
+        public static final class ReportedSource {
+            public static final int DIRECT_INPUT = 0;
+            public static final int EMAIL = 1;
+            public static final int PHONE = 2;
+            public static final int VOICEMAIL = 3;
+            public static final int SELF_SERVICE = 4;      // Use for agentic creation
+            public static final int SYSTEMS_MANAGEMENT = 5;
+            public static final int WEB = 6;
+            public static final int OTHER = 7;
+            public static final int BMC_IMPACT = 8;
+        }
+
+        private IncidentCreate() {}
+    }
+
+    public static final class WorkOrderCreate {
+        /**
+         * Required fields for creating new work orders via WOI:WorkOrder form.
+         */
+        public static final int SUMMARY = 1000000000;              // Required: Work order summary (max 255 chars)
+        public static final int DESCRIPTION = 1000000151;          // Required: Detailed description
+        public static final int WORK_ORDER_TYPE = 1000000013;      // Required: Type of work order
+        public static final int PRIORITY = 1000000164;             // Required: 0=Critical, 1=High, 2=Medium, 3=Low
+        public static final int STATUS = 7;                        // Required: 0=New (default for new work orders)
+
+        // Optional fields commonly set during creation
+        public static final int REQUESTER_FIRST_NAME = 1000000018; // Optional: Requester first name
+        public static final int REQUESTER_LAST_NAME = 1000000019;  // Optional: Requester last name
+        public static final int LOCATION_COMPANY = 1000000001;     // Optional: Location company
+        public static final int CATEGORY_TIER_1 = 1000000063;      // Optional: Category tier 1
+        public static final int CATEGORY_TIER_2 = 1000000064;      // Optional: Category tier 2
+        public static final int CATEGORY_TIER_3 = 1000000065;      // Optional: Category tier 3
+        public static final int ASSIGNED_GROUP = 1000000217;       // Optional: Assignment group
+        public static final int SCHEDULED_START_DATE = 1000000411; // Optional: Scheduled start
+        public static final int SCHEDULED_END_DATE = 1000000412;   // Optional: Scheduled end
+
+        // Enum values for required fields
+        public static final class WorkOrderType {
+            public static final int GENERAL = 0;
+            public static final int PROJECT_WORK = 1;
+            public static final int BREAK_FIX = 2;
+            public static final int MOVE_ADD_CHANGE = 3;
+            public static final int RELEASE_ACTIVITY = 4;
+        }
+
+        public static final class Priority {
+            public static final int CRITICAL = 0;
+            public static final int HIGH = 1;
+            public static final int MEDIUM = 2;
+            public static final int LOW = 3;
+        }
+
+        private WorkOrderCreate() {}
+    }
+
+    // ==========================================================================
     // Status Values (Common Enum Values)
     // ==========================================================================
     public static final class StatusValues {

@@ -54,6 +54,16 @@ export interface ChatResponseChunk {
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 /**
+ * Pending action for agentic operations (Section 12).
+ */
+export interface PendingActionInfo {
+  actionId: string;
+  actionType: 'INCIDENT_CREATE' | 'WORK_ORDER_CREATE';
+  preview: string;
+  expiresAt: string;
+}
+
+/**
  * Individual chat message in the conversation.
  */
 export interface ChatMessage {
@@ -65,6 +75,10 @@ export interface ChatMessage {
   citations?: Citation[];
   confidenceScore?: number;
   error?: string;
+  /** Pending action if this message contains a confirmation prompt */
+  pendingAction?: PendingActionInfo;
+  /** Whether this message represents a confirmed/cancelled action result */
+  isActionResult?: boolean;
 }
 
 /**
@@ -159,5 +173,26 @@ export const DEFAULT_SUGGESTIONS: SuggestionChip[] = [
     id: '4',
     label: 'Email problems',
     query: 'How to resolve Outlook sync issues?',
+  },
+];
+
+/**
+ * Agentic suggestion chips for ticket creation.
+ */
+export const AGENTIC_SUGGESTIONS: SuggestionChip[] = [
+  {
+    id: 'agentic-1',
+    label: 'Create incident',
+    query: 'Create a new incident for network connectivity issues in Building A',
+  },
+  {
+    id: 'agentic-2',
+    label: 'Create work order',
+    query: 'Create a work order for scheduled server maintenance this weekend',
+  },
+  {
+    id: 'agentic-3',
+    label: 'Find similar',
+    query: 'Search for similar incidents about printer problems',
   },
 ];

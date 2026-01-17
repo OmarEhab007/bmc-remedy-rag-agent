@@ -15,6 +15,11 @@ export { TypingIndicator } from './TypingIndicator';
 
 // Citation components
 export { CitationBlock, InlineCitation } from './CitationBlock';
+export { ConfidenceIndicator, ConfidenceBadge } from './ConfidenceIndicator';
+export { MessageFooter, MessageFooterCompact } from './MessageFooter';
+
+// Agentic components (Section 12)
+export { ConfirmationPrompt, InlineConfirmationButtons } from './ConfirmationPrompt';
 
 // Empty state and suggestions
 export { EmptyState } from './EmptyState';

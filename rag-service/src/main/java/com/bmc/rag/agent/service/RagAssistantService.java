@@ -1,5 +1,6 @@
 package com.bmc.rag.agent.service;
 
+import com.bmc.rag.agent.config.AgenticConfig;
 import com.bmc.rag.agent.config.RagConfig;
 import com.bmc.rag.agent.config.ZaiConfig;
 import com.bmc.rag.agent.memory.PostgresChatMemoryStore;
@@ -41,6 +42,10 @@ public class RagAssistantService {
     private final PostgresChatMemoryStore chatMemoryStore;
     private final RagConfig ragConfig;
     private final ZaiConfig zaiConfig;
+    private final AgenticConfig agenticConfig;
+
+    // Optional agentic assistant (injected when agentic.enabled=true)
+    private AgenticAssistantService agenticAssistantService;
 
     // Session-specific chat memories with eviction policy to prevent OOM
     private final Cache<String, ChatMemory> sessionMemories;
@@ -61,22 +66,73 @@ public class RagAssistantService {
             SecureContentRetriever contentRetriever,
             PostgresChatMemoryStore chatMemoryStore,
             RagConfig ragConfig,
-            ZaiConfig zaiConfig) {
+            ZaiConfig zaiConfig,
+            AgenticConfig agenticConfig) {
         this.chatModel = chatModel;
         this.streamingChatModel = streamingChatModel;
         this.contentRetriever = contentRetriever;
         this.chatMemoryStore = chatMemoryStore;
         this.ragConfig = ragConfig;
         this.zaiConfig = zaiConfig;
+        this.agenticConfig = agenticConfig;
 
         // Initialize Caffeine cache with eviction policy
+        // Session timeout is 30 minutes per security spec (P1.4)
         this.sessionMemories = Caffeine.newBuilder()
-            .expireAfterAccess(24, TimeUnit.HOURS)  // Evict after 24 hours of inactivity
-            .maximumSize(10_000)                      // Maximum 10,000 sessions in memory
+            .expireAfterAccess(30, TimeUnit.MINUTES)  // Evict after 30 minutes of inactivity
+            .maximumSize(10_000)                       // Maximum 10,000 sessions in memory
             .recordStats()                            // Enable statistics for monitoring
             .evictionListener((key, value, cause) ->
                 log.debug("Session {} evicted from memory cache (cause: {})", key, cause))
             .build();
+    }
+
+    /**
+     * Set the agentic assistant service (optional, injected when enabled).
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setAgenticAssistantService(AgenticAssistantService agenticAssistantService) {
+        this.agenticAssistantService = agenticAssistantService;
+        if (agenticAssistantService != null) {
+            log.info("Agentic assistant service injected - agentic operations enabled");
+        }
+    }
+
+    /**
+     * Check if the request has agentic intent and should be delegated.
+     */
+    public boolean hasAgenticIntent(String question) {
+        return agenticAssistantService != null &&
+               agenticConfig.isEnabled() &&
+               agenticAssistantService.hasAgenticIntent(question);
+    }
+
+    /**
+     * Process a request with potential agentic intent.
+     * Delegates to AgenticAssistantService if agentic intent is detected.
+     *
+     * @param sessionId The conversation session ID
+     * @param question The user's question
+     * @param userId The user ID
+     * @param userContext User context for access control
+     * @return The assistant's response
+     */
+    public ChatResponse chatWithAgenticSupport(String sessionId, String question, String userId, UserContext userContext) {
+        // Check for agentic intent
+        if (hasAgenticIntent(question)) {
+            log.info("Agentic intent detected, delegating to AgenticAssistantService");
+            var agenticResponse = agenticAssistantService.processMessage(sessionId, userId, question, userContext);
+
+            return ChatResponse.builder()
+                .sessionId(sessionId)
+                .response(agenticResponse.getResponse())
+                .sources(Collections.emptyList())
+                .hasContext(false)
+                .build();
+        }
+
+        // Fall back to regular chat
+        return chat(sessionId, question, userContext);
     }
 
     /**
@@ -201,72 +257,77 @@ public class RagAssistantService {
 
         // Use streaming model
         CountDownLatch latch = new CountDownLatch(1);
-        List<String> sources = retrievalResult.getSourceReferences();
+        List<SecureContentRetriever.RetrievedDocument> citationDocuments = retrievalResult.getDocumentsForCitations();
 
         streamingChatModel.generate(messages, new StreamingResponseHandler<AiMessage>() {
             private volatile boolean truncated = false;
             private volatile boolean inThinkingBlock = false;
             private final StringBuilder thinkingContent = new StringBuilder();
+            private final Object tokenLock = new Object();  // Synchronization lock for token ordering
 
             @Override
             public void onNext(String token) {
-                // Check response size to prevent OOM from unbounded streaming
-                if (truncated) {
-                    return;  // Stop processing tokens after truncation
-                }
-
-                // Handle thinking mode tokens (GLM-4.7 format)
-                if (zaiConfig.isThinkingEnabled()) {
-                    // Check for thinking block markers
-                    if (token.contains(THINKING_START)) {
-                        inThinkingBlock = true;
-                        thinkingContent.setLength(0);  // Reset thinking buffer
-                        log.debug("Entering thinking block for session {}", sessionId);
-                        // Extract any content after the start tag
-                        int startIdx = token.indexOf(THINKING_START) + THINKING_START.length();
-                        if (startIdx < token.length()) {
-                            thinkingContent.append(token.substring(startIdx));
-                        }
-                        return;  // Don't send thinking start marker to client
+                // Synchronize to ensure tokens are processed and sent in order
+                // LangChain4j may invoke onNext() from multiple threads concurrently
+                synchronized (tokenLock) {
+                    // Check response size to prevent OOM from unbounded streaming
+                    if (truncated) {
+                        return;  // Stop processing tokens after truncation
                     }
 
-                    if (inThinkingBlock) {
-                        if (token.contains(THINKING_END)) {
-                            // Extract content before the end tag
-                            int endIdx = token.indexOf(THINKING_END);
-                            if (endIdx > 0) {
-                                thinkingContent.append(token.substring(0, endIdx));
+                    // Handle thinking mode tokens (GLM-4.7 format)
+                    if (zaiConfig.isThinkingEnabled()) {
+                        // Check for thinking block markers
+                        if (token.contains(THINKING_START)) {
+                            inThinkingBlock = true;
+                            thinkingContent.setLength(0);  // Reset thinking buffer
+                            log.debug("Entering thinking block for session {}", sessionId);
+                            // Extract any content after the start tag
+                            int startIdx = token.indexOf(THINKING_START) + THINKING_START.length();
+                            if (startIdx < token.length()) {
+                                thinkingContent.append(token.substring(startIdx));
                             }
-                            log.debug("Exiting thinking block for session {} ({} chars of reasoning)",
-                                sessionId, thinkingContent.length());
-                            inThinkingBlock = false;
-                            // Process any content after the end tag
-                            int afterIdx = endIdx + THINKING_END.length();
-                            if (afterIdx < token.length()) {
-                                String afterThinking = token.substring(afterIdx);
-                                if (!afterThinking.isEmpty()) {
-                                    fullResponse.append(afterThinking);
-                                    tokenConsumer.accept(afterThinking);
+                            return;  // Don't send thinking start marker to client
+                        }
+
+                        if (inThinkingBlock) {
+                            if (token.contains(THINKING_END)) {
+                                // Extract content before the end tag
+                                int endIdx = token.indexOf(THINKING_END);
+                                if (endIdx > 0) {
+                                    thinkingContent.append(token.substring(0, endIdx));
                                 }
+                                log.debug("Exiting thinking block for session {} ({} chars of reasoning)",
+                                    sessionId, thinkingContent.length());
+                                inThinkingBlock = false;
+                                // Process any content after the end tag
+                                int afterIdx = endIdx + THINKING_END.length();
+                                if (afterIdx < token.length()) {
+                                    String afterThinking = token.substring(afterIdx);
+                                    if (!afterThinking.isEmpty()) {
+                                        fullResponse.append(afterThinking);
+                                        tokenConsumer.accept(afterThinking);
+                                    }
+                                }
+                                return;
                             }
+                            // Accumulate thinking content but don't send to client
+                            thinkingContent.append(token);
                             return;
                         }
-                        // Accumulate thinking content but don't send to client
-                        thinkingContent.append(token);
+                    }
+
+                    // Normal token processing
+                    if (fullResponse.length() + token.length() > MAX_RESPONSE_SIZE) {
+                        log.warn("Response exceeded max size ({} chars), truncating for session {}",
+                            MAX_RESPONSE_SIZE, sessionId);
+                        truncated = true;
+                        tokenConsumer.accept("\n\n[Response truncated due to length]");
                         return;
                     }
+                    fullResponse.append(token);
+                    tokenConsumer.accept(token);
                 }
-
-                // Normal token processing
-                if (fullResponse.length() + token.length() > MAX_RESPONSE_SIZE) {
-                    log.warn("Response exceeded max size ({} chars), truncating for session {}",
-                        MAX_RESPONSE_SIZE, sessionId);
-                    truncated = true;
-                    tokenConsumer.accept("\n\n[Response truncated due to length]");
-                    return;
-                }
-                fullResponse.append(token);
-                tokenConsumer.accept(token);
             }
 
             @Override
@@ -283,11 +344,16 @@ public class RagAssistantService {
                     memory.add(UserMessage.from(question));
                     memory.add(AiMessage.from(responseText));
 
-                    // Calculate confidence based on context availability
-                    double confidence = retrievalResult.isEmpty() ? 0.5 : 0.85;
+                    // Calculate confidence as average of top retrieval scores
+                    double confidence = retrievalResult.isEmpty()
+                        ? 0.5
+                        : citationDocuments.stream()
+                            .mapToDouble(doc -> doc.score())
+                            .average()
+                            .orElse(0.5);
 
-                    // Call completion handler
-                    completionConsumer.onComplete(sources, confidence);
+                    // Call completion handler with full document details
+                    completionConsumer.onComplete(citationDocuments, confidence);
                 } catch (Exception e) {
                     log.error("Error in onComplete handler: {}", e.getMessage(), e);
                     completionConsumer.onError(e);
@@ -342,7 +408,7 @@ public class RagAssistantService {
      */
     @FunctionalInterface
     public interface StreamingCompletionHandler {
-        void onComplete(List<String> sources, Double confidence);
+        void onComplete(List<SecureContentRetriever.RetrievedDocument> documents, Double confidence);
 
         default void onError(Throwable error) {
             // Default error handling - can be overridden

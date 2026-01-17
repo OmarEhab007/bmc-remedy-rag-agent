@@ -181,6 +181,62 @@ public class KnowledgeExtractor {
     }
 
     /**
+     * Check which article IDs from the provided list still exist in Remedy.
+     *
+     * @param articleIds List of article IDs to check
+     * @return Set of article IDs that still exist
+     */
+    public Set<String> checkExistence(List<String> articleIds) {
+        if (articleIds == null || articleIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return arContext.executeWithRetry(ctx -> {
+            Set<String> existingIds = new HashSet<>();
+
+            // Build OR qualification for all article IDs
+            StringBuilder orQualification = new StringBuilder();
+            for (int i = 0; i < articleIds.size(); i++) {
+                if (i > 0) orQualification.append(" OR ");
+                orQualification.append("'")
+                    .append(FieldIdConstants.KnowledgeArticle.ARTICLE_ID)
+                    .append("' = \"")
+                    .append(articleIds.get(i).replace("\"", "\\\""))
+                    .append("\"");
+            }
+
+            QualifierInfo qualifierInfo = QualifierBuilder.parseQualification(
+                ctx, FORM_NAME, orQualification.toString());
+            OutputInteger numMatches = new OutputInteger();
+
+            // Only fetch the article ID field
+            int[] fieldIds = { FieldIdConstants.KnowledgeArticle.ARTICLE_ID };
+
+            List<Entry> entries = ctx.getListEntryObjects(
+                FORM_NAME,
+                qualifierInfo,
+                0,
+                articleIds.size(),
+                null,
+                fieldIds,
+                false,
+                numMatches
+            );
+
+            if (entries != null) {
+                for (Entry entry : entries) {
+                    Value value = entry.get(FieldIdConstants.KnowledgeArticle.ARTICLE_ID);
+                    if (value != null && value.getValue() != null) {
+                        existingIds.add(value.getValue().toString());
+                    }
+                }
+            }
+
+            return existingIds;
+        });
+    }
+
+    /**
      * Map a Remedy Entry to a KnowledgeArticle.
      */
     private KnowledgeArticle mapEntryToArticle(Entry entry) {

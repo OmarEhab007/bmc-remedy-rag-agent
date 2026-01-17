@@ -1,25 +1,31 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { submitFeedback, submitDetailedFeedback, type FeedbackType as ApiFeedbackType } from '../services/feedbackApi';
 
 type FeedbackType = 'positive' | 'negative' | null;
 
 interface FeedbackButtonsProps {
   messageId: string;
+  sessionId?: string;
+  userId?: string;
   onFeedback?: (messageId: string, feedback: FeedbackType) => void;
   className?: string;
 }
 
 export function FeedbackButtons({
   messageId,
+  sessionId = '',
+  userId,
   onFeedback,
   className = '',
 }: FeedbackButtonsProps) {
   const { t } = useTranslation();
   const [feedback, setFeedback] = useState<FeedbackType>(null);
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleFeedback = useCallback(
-    (type: FeedbackType) => {
+    async (type: FeedbackType) => {
       // Toggle if clicking the same button
       const newFeedback = feedback === type ? null : type;
       setFeedback(newFeedback);
@@ -31,9 +37,28 @@ export function FeedbackButtons({
         setShowFeedbackInput(false);
       }
 
+      // Submit to backend API if we have a valid feedback type
+      if (newFeedback && sessionId) {
+        setIsSubmitting(true);
+        try {
+          await submitFeedback({
+            messageId,
+            sessionId,
+            feedbackType: newFeedback as ApiFeedbackType,
+            userId,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (error) {
+          console.error('Failed to submit feedback:', error);
+          // Continue with local state update even if API fails
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
+
       onFeedback?.(messageId, newFeedback);
     },
-    [messageId, feedback, onFeedback]
+    [messageId, sessionId, userId, feedback, onFeedback]
   );
 
   return (
@@ -41,10 +66,11 @@ export function FeedbackButtons({
       {/* Thumbs up */}
       <button
         onClick={() => handleFeedback('positive')}
-        className={`feedback-button ${feedback === 'positive' ? 'active-positive' : ''}`}
+        className={`feedback-button ${feedback === 'positive' ? 'active-positive' : ''} ${isSubmitting ? 'opacity-50 cursor-wait' : ''}`}
         title={t('messages.goodResponse')}
         aria-label={t('messages.markAsGood')}
         aria-pressed={feedback === 'positive'}
+        disabled={isSubmitting}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -59,10 +85,11 @@ export function FeedbackButtons({
       {/* Thumbs down */}
       <button
         onClick={() => handleFeedback('negative')}
-        className={`feedback-button ${feedback === 'negative' ? 'active-negative' : ''}`}
+        className={`feedback-button ${feedback === 'negative' ? 'active-negative' : ''} ${isSubmitting ? 'opacity-50 cursor-wait' : ''}`}
         title={t('messages.badResponse')}
         aria-label={t('messages.markAsBad')}
         aria-pressed={feedback === 'negative'}
+        disabled={isSubmitting}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -77,8 +104,10 @@ export function FeedbackButtons({
       {/* Optional feedback input for negative feedback */}
       {showFeedbackInput && (
         <FeedbackInput
-          onSubmit={(text) => {
-            console.log('Feedback text:', text);
+          messageId={messageId}
+          sessionId={sessionId}
+          userId={userId}
+          onSubmit={() => {
             setShowFeedbackInput(false);
           }}
           onClose={() => setShowFeedbackInput(false)}
@@ -89,18 +118,35 @@ export function FeedbackButtons({
 }
 
 interface FeedbackInputProps {
-  onSubmit: (text: string) => void;
+  messageId: string;
+  sessionId: string;
+  userId?: string;
+  onSubmit: () => void;
   onClose: () => void;
 }
 
-function FeedbackInput({ onSubmit, onClose }: FeedbackInputProps) {
+function FeedbackInput({ messageId, sessionId, userId, onSubmit, onClose }: FeedbackInputProps) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (text.trim()) {
-      onSubmit(text.trim());
-      setText('');
+  const handleSubmit = async () => {
+    if (text.trim() && sessionId) {
+      setIsSubmitting(true);
+      try {
+        await submitDetailedFeedback(messageId, sessionId, text.trim(), userId);
+        setText('');
+        onSubmit();
+      } catch (error) {
+        console.error('Failed to submit detailed feedback:', error);
+        // Still close the input on error to avoid blocking the user
+        onSubmit();
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else if (text.trim()) {
+      // Fallback if no sessionId - just close
+      onSubmit();
     }
   };
 
@@ -124,8 +170,8 @@ function FeedbackInput({ onSubmit, onClose }: FeedbackInputProps) {
         </button>
         <button
           onClick={handleSubmit}
-          className="px-3 py-1 text-sm bg-accent text-white rounded-md hover:bg-accent-dark"
-          disabled={!text.trim()}
+          className="px-3 py-1 text-sm bg-accent text-white rounded-md hover:bg-accent-dark disabled:opacity-50"
+          disabled={!text.trim() || isSubmitting}
         >
           {t('common.submit')}
         </button>
