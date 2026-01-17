@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { KeyboardEvent } from 'react';
 import { ConnectionStatus } from '../types/chat';
 
@@ -18,15 +19,19 @@ export function InputArea({
   disabled = false,
   isStreaming = false,
   onStopGeneration,
-  placeholder = 'Ask me anything about IT support...',
+  placeholder,
   maxLength = 4000,
 }: InputAreaProps) {
+  const { t } = useTranslation();
   const [message, setMessage] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isConnected = connectionStatus === ConnectionStatus.CONNECTED;
   const isDisabled = disabled || !isConnected;
+
+  // Use provided placeholder or translated default
+  const displayPlaceholder = placeholder || t('chat.placeholder');
 
   // Auto-focus on mount
   useEffect(() => {
@@ -91,11 +96,11 @@ export function InputArea({
             onKeyDown={handleKeyDown}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder={isConnected ? placeholder : 'Waiting for connection...'}
+            placeholder={isConnected ? displayPlaceholder : t('chat.waitingForConnection')}
             disabled={isDisabled}
             rows={1}
             className="input-textarea-new"
-            aria-label="Message input"
+            aria-label={t('chat.messageInput')}
           />
 
           {/* Right side actions */}
@@ -112,8 +117,8 @@ export function InputArea({
               <button
                 onClick={onStopGeneration}
                 className="input-btn input-btn-stop"
-                aria-label="Stop generating"
-                title="Stop generating (Esc)"
+                aria-label={t('chat.stopGenerating')}
+                title={t('chat.stopGeneratingShortcut')}
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -124,8 +129,8 @@ export function InputArea({
                 onClick={handleSubmit}
                 disabled={isDisabled || !hasContent}
                 className={`input-btn input-btn-send ${hasContent ? 'input-btn-send-active' : ''}`}
-                aria-label="Send message"
-                title="Send message (Enter)"
+                aria-label={t('chat.sendMessage')}
+                title={t('chat.sendMessageShortcut')}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
                   <path
@@ -147,15 +152,15 @@ export function InputArea({
             <span className="status-dot" />
             <span>
               {connectionStatus === ConnectionStatus.CONNECTING
-                ? 'Connecting...'
-                : 'Connection lost'}
+                ? t('header.connecting')
+                : t('chat.connectionLost')}
             </span>
           </div>
         )}
 
         {/* Disclaimer text */}
         <p className="input-disclaimer">
-          Damee GPT can make mistakes. Consider checking important information.
+          {t('chat.disclaimer')}
         </p>
       </div>
     </div>

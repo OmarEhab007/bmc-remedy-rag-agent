@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { SuggestionCard } from './SuggestionCard';
 import { QuickChip } from './QuickChip';
 
@@ -7,6 +8,8 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ onSuggestionSelect, disabled = false }: EmptyStateProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="empty-state">
       <div className="empty-state-content">
@@ -32,11 +35,10 @@ export function EmptyState({ onSuggestionSelect, disabled = false }: EmptyStateP
 
         {/* Welcome Text */}
         <h1 className="empty-state-title">
-          How can I help you today?
+          {t('emptyState.welcome')}
         </h1>
         <p className="empty-state-subtitle">
-          Your AI-powered IT support assistant. Ask me about incidents,
-          knowledge articles, or any ITSM-related questions.
+          {t('emptyState.subtitle')}
         </p>
 
         {/* Suggestion Cards */}
@@ -47,9 +49,9 @@ export function EmptyState({ onSuggestionSelect, disabled = false }: EmptyStateP
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
             }
-            title="Search incidents"
-            description="Find related incidents and their resolutions"
-            onClick={() => onSuggestionSelect("Show me the most recent P1 incidents")}
+            title={t('emptyState.searchIncidents')}
+            description={t('emptyState.searchIncidentsDesc')}
+            onClick={() => onSuggestionSelect(t('suggestions.showRecentP1'))}
             disabled={disabled}
             gradient="blue"
           />
@@ -59,9 +61,9 @@ export function EmptyState({ onSuggestionSelect, disabled = false }: EmptyStateP
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
               </svg>
             }
-            title="Password reset"
-            description="Learn password reset procedures"
-            onClick={() => onSuggestionSelect("How do I reset a user password?")}
+            title={t('emptyState.passwordReset')}
+            description={t('emptyState.passwordResetDesc')}
+            onClick={() => onSuggestionSelect(t('suggestions.resetPassword'))}
             disabled={disabled}
             gradient="green"
           />
@@ -71,9 +73,9 @@ export function EmptyState({ onSuggestionSelect, disabled = false }: EmptyStateP
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
               </svg>
             }
-            title="VPN troubleshooting"
-            description="Fix common VPN connection issues"
-            onClick={() => onSuggestionSelect("Common VPN connection troubleshooting steps")}
+            title={t('emptyState.vpnTroubleshooting')}
+            description={t('emptyState.vpnTroubleshootingDesc')}
+            onClick={() => onSuggestionSelect(t('suggestions.vpnSteps'))}
             disabled={disabled}
             gradient="purple"
           />
@@ -83,9 +85,9 @@ export function EmptyState({ onSuggestionSelect, disabled = false }: EmptyStateP
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
             </svg>
             }
-            title="Email issues"
-            description="Resolve Outlook sync problems"
-            onClick={() => onSuggestionSelect("How to resolve Outlook sync issues?")}
+            title={t('emptyState.emailIssues')}
+            description={t('emptyState.emailIssuesDesc')}
+            onClick={() => onSuggestionSelect(t('suggestions.outlookSync'))}
             disabled={disabled}
             gradient="orange"
           />
@@ -93,26 +95,26 @@ export function EmptyState({ onSuggestionSelect, disabled = false }: EmptyStateP
 
         {/* Quick Actions */}
         <div className="quick-actions">
-          <span className="quick-actions-label">Quick actions</span>
+          <span className="quick-actions-label">{t('emptyState.quickActions')}</span>
           <div className="quick-actions-chips">
             <QuickChip
-              label="Recent incidents"
-              onClick={() => onSuggestionSelect("Show recent incidents")}
+              label={t('emptyState.recentIncidents')}
+              onClick={() => onSuggestionSelect(t('suggestions.showRecent'))}
               disabled={disabled}
             />
             <QuickChip
-              label="My open tickets"
-              onClick={() => onSuggestionSelect("What are my open tickets?")}
+              label={t('emptyState.myOpenTickets')}
+              onClick={() => onSuggestionSelect(t('suggestions.openTickets'))}
               disabled={disabled}
             />
             <QuickChip
-              label="System status"
-              onClick={() => onSuggestionSelect("What is the current system status?")}
+              label={t('emptyState.systemStatus')}
+              onClick={() => onSuggestionSelect(t('suggestions.currentStatus'))}
               disabled={disabled}
             />
             <QuickChip
-              label="Knowledge base"
-              onClick={() => onSuggestionSelect("Search knowledge base articles")}
+              label={t('emptyState.knowledgeBase')}
+              onClick={() => onSuggestionSelect(t('suggestions.searchKB'))}
               disabled={disabled}
             />
           </div>

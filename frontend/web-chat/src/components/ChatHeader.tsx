@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UserContext } from '../types/chat';
 import { ConnectionStatus } from '../types/chat';
 import { ThemeToggle } from '../providers/ThemeProvider';
@@ -63,6 +64,7 @@ export function ChatHeader({
   onExportMarkdown,
   onOpenSettings,
 }: ChatHeaderProps) {
+  const { t } = useTranslation();
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +90,7 @@ export function ChatHeader({
         <button
           onClick={onMenuClick}
           className="md:hidden p-2 rounded-lg hover:bg-tertiary transition-colors"
-          aria-label="Open menu"
+          aria-label={t('header.openMenu')}
         >
           <svg
             className="w-5 h-5 text-main"
@@ -117,8 +119,8 @@ export function ChatHeader({
         <button
           onClick={onNewChat}
           className="p-2 rounded-lg hover:bg-tertiary transition-colors"
-          title="New chat (Ctrl+N)"
-          aria-label="Start new conversation"
+          title={t('header.newChatShortcut')}
+          aria-label={t('header.newChat')}
         >
           <svg
             className="w-5 h-5 text-secondary"
@@ -139,8 +141,8 @@ export function ChatHeader({
         <button
           onClick={onClearChat}
           className="p-2 rounded-lg hover:bg-tertiary transition-colors"
-          title="Clear conversation"
-          aria-label="Clear conversation"
+          title={t('header.clearConversation')}
+          aria-label={t('header.clearConversation')}
         >
           <svg
             className="w-5 h-5 text-secondary"
@@ -163,8 +165,8 @@ export function ChatHeader({
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="p-2 rounded-lg hover:bg-tertiary transition-colors"
-              title="Export conversation"
-              aria-label="Export conversation"
+              title={t('header.exportConversation')}
+              aria-label={t('header.exportConversation')}
               aria-expanded={showExportMenu}
               aria-haspopup="true"
             >
@@ -200,7 +202,7 @@ export function ChatHeader({
                     <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                     </svg>
-                    <span className="text-main">Export as JSON</span>
+                    <span className="text-main">{t('header.exportAsJSON')}</span>
                   </button>
                 )}
                 {onExportMarkdown && (
@@ -215,7 +217,7 @@ export function ChatHeader({
                     <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <span className="text-main">Export as Markdown</span>
+                    <span className="text-main">{t('header.exportAsMarkdown')}</span>
                   </button>
                 )}
               </div>
@@ -228,8 +230,8 @@ export function ChatHeader({
           <button
             onClick={onOpenSettings}
             className="p-2 rounded-lg hover:bg-tertiary transition-colors"
-            title="Settings"
-            aria-label="Open settings"
+            title={t('header.settings')}
+            aria-label={t('header.openSettings')}
           >
             <svg
               className="w-5 h-5 text-secondary"
@@ -269,6 +271,7 @@ interface ModelSelectorProps {
 }
 
 function ModelSelector({ connectionStatus, onReconnect }: ModelSelectorProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -317,6 +320,21 @@ function ModelSelector({ connectionStatus, onReconnect }: ModelSelectorProps) {
     }
   };
 
+  const getStatusText = () => {
+    switch (connectionStatus) {
+      case ConnectionStatus.CONNECTED:
+        return t('header.connected');
+      case ConnectionStatus.CONNECTING:
+        return t('header.connecting');
+      case ConnectionStatus.DISCONNECTED:
+        return t('header.disconnected');
+      case ConnectionStatus.ERROR:
+        return t('header.connectionError');
+      default:
+        return '';
+    }
+  };
+
   return (
     <div className="relative" ref={menuRef}>
       <button
@@ -346,7 +364,7 @@ function ModelSelector({ connectionStatus, onReconnect }: ModelSelectorProps) {
           ref={dropdownRef}
           id="model-selector-dropdown"
           role="menu"
-          aria-label="Model information"
+          aria-label={t('header.modelInfo')}
           className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-elevated border border-main rounded-lg shadow-lg z-50 overflow-hidden animate-fade-in">
           {/* Model info */}
           <div className="p-4 border-b border-main">
@@ -375,10 +393,7 @@ function ModelSelector({ connectionStatus, onReconnect }: ModelSelectorProps) {
               <div className="flex items-center gap-2">
                 {getStatusIndicator()}
                 <span className="text-sm text-main">
-                  {connectionStatus === ConnectionStatus.CONNECTED && 'Connected'}
-                  {connectionStatus === ConnectionStatus.CONNECTING && 'Connecting...'}
-                  {connectionStatus === ConnectionStatus.DISCONNECTED && 'Disconnected'}
-                  {connectionStatus === ConnectionStatus.ERROR && 'Connection Error'}
+                  {getStatusText()}
                 </span>
               </div>
               {(connectionStatus === ConnectionStatus.DISCONNECTED ||
@@ -392,7 +407,7 @@ function ModelSelector({ connectionStatus, onReconnect }: ModelSelectorProps) {
                     className="text-xs font-medium hover:underline"
                     style={{ color: 'var(--color-accent)' }}
                   >
-                    Reconnect
+                    {t('header.reconnect')}
                   </button>
                 )}
             </div>
@@ -408,6 +423,7 @@ interface UserMenuProps {
 }
 
 function UserMenu({ userContext }: UserMenuProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -452,7 +468,7 @@ function UserMenu({ userContext }: UserMenuProps) {
         className="p-1 rounded-lg hover:bg-tertiary transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         aria-expanded={isOpen}
         aria-haspopup="true"
-        aria-label="User menu"
+        aria-label={t('header.userMenu')}
         aria-controls="user-menu-dropdown"
       >
         <div
@@ -469,7 +485,7 @@ function UserMenu({ userContext }: UserMenuProps) {
           ref={dropdownRef}
           id="user-menu-dropdown"
           role="menu"
-          aria-label="User options"
+          aria-label={t('header.userMenu')}
           className="absolute right-0 top-full mt-2 w-64 bg-elevated border border-main rounded-lg shadow-lg z-50 overflow-hidden animate-fade-in">
           {/* User info */}
           <div className="p-4 border-b border-main">
@@ -482,7 +498,7 @@ function UserMenu({ userContext }: UserMenuProps) {
           {/* Groups */}
           <div className="p-4">
             <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
-              Groups
+              {t('header.groups')}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {userContext.userGroups.map((group, index) => (
@@ -502,7 +518,7 @@ function UserMenu({ userContext }: UserMenuProps) {
 
           {/* Footer */}
           <div className="px-4 py-3 bg-secondary border-t border-main">
-            <div className="text-xs text-muted">Development Mode</div>
+            <div className="text-xs text-muted">{t('header.developmentMode')}</div>
           </div>
         </div>
       )}

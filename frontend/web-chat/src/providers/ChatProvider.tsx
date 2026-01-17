@@ -4,11 +4,13 @@ import {
   useCallback,
   useEffect,
   useState,
+  useRef,
 } from 'react';
 import type { ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useChat } from '../hooks/useChat';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { fetchSessions, fetchSessionHistory } from '../services/chatApi';
 import type {
   ChatMessage,
   ChatQueryMessage,
@@ -64,10 +66,12 @@ export function ChatProvider({ children }: ChatProviderProps) {
     setError,
     clearSession,
     deleteMessage: deleteMessageFromChat,
+    loadSessions,
   } = useChat();
 
   const [userContext, setUserContext] = useState<UserContext>(DEFAULT_USER_CONTEXT);
   const [pendingMessageId, setPendingMessageId] = useState<string | null>(null);
+  const sessionsLoadedRef = useRef(false);
 
   // Handle incoming WebSocket messages
   const handleWebSocketMessage = useCallback(
@@ -155,14 +159,76 @@ export function ChatProvider({ children }: ChatProviderProps) {
     onConnectionChange: handleConnectionChange,
   });
 
-  // Create initial session if none exists or select first session if none active
+  // Load sessions from backend on mount
   useEffect(() => {
-    if (state.sessions.length === 0) {
-      createSession();
-    } else if (!state.activeSessionId && state.sessions.length > 0) {
+    if (sessionsLoadedRef.current) return;
+    sessionsLoadedRef.current = true;
+
+    async function loadSessionsFromBackend() {
+      try {
+        console.log('Loading sessions from backend...');
+        const backendSessions = await fetchSessions();
+        console.log('Backend sessions:', backendSessions);
+
+        if (backendSessions.length > 0) {
+          // Load full history for each session
+          const sessionsWithHistory: ChatSession[] = await Promise.all(
+            backendSessions.map(async (summary) => {
+              try {
+                const history = await fetchSessionHistory(summary.sessionId);
+                return {
+                  id: summary.sessionId,
+                  title: summary.title || 'New Conversation',
+                  createdAt: new Date(summary.lastUpdated),
+                  updatedAt: new Date(summary.lastUpdated),
+                  messages: history.messages.map((msg, idx) => ({
+                    id: `${summary.sessionId}-${idx}`,
+                    role: msg.type === 'USER' ? 'user' as const : 'assistant' as const,
+                    content: msg.content,
+                    timestamp: new Date(summary.lastUpdated),
+                  })),
+                };
+              } catch (err) {
+                console.error(`Failed to load history for session ${summary.sessionId}:`, err);
+                return {
+                  id: summary.sessionId,
+                  title: summary.title || 'New Conversation',
+                  createdAt: new Date(summary.lastUpdated),
+                  updatedAt: new Date(summary.lastUpdated),
+                  messages: [],
+                };
+              }
+            })
+          );
+
+          loadSessions(sessionsWithHistory);
+          setActiveSession(sessionsWithHistory[0].id);
+          console.log('Loaded sessions from backend:', sessionsWithHistory.length);
+        } else {
+          // No sessions in backend, create a new one
+          console.log('No backend sessions, creating new session');
+          createSession();
+        }
+      } catch (error) {
+        console.error('Failed to load sessions from backend:', error);
+        // Fallback: use localStorage sessions or create new
+        if (state.sessions.length === 0) {
+          createSession();
+        } else if (!state.activeSessionId) {
+          setActiveSession(state.sessions[0].id);
+        }
+      }
+    }
+
+    loadSessionsFromBackend();
+  }, [loadSessions, createSession, setActiveSession]);
+
+  // Select first session if none active (after initial load)
+  useEffect(() => {
+    if (!state.activeSessionId && state.sessions.length > 0) {
       setActiveSession(state.sessions[0].id);
     }
-  }, [state.sessions.length, state.activeSessionId, createSession, setActiveSession]);
+  }, [state.activeSessionId, state.sessions.length, setActiveSession]);
 
   const sendMessage = useCallback(
     (text: string) => {

@@ -331,6 +331,13 @@ public class RagAssistantService {
     }
 
     /**
+     * Get summaries of all chat sessions.
+     */
+    public List<PostgresChatMemoryStore.SessionInfo> getSessionSummaries() {
+        return chatMemoryStore.getSessionSummaries();
+    }
+
+    /**
      * Build the message list for LLM.
      */
     private List<ChatMessage> buildMessages(

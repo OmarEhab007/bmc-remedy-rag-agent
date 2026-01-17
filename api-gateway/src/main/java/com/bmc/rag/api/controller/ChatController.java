@@ -121,6 +121,27 @@ public class ChatController {
     }
 
     /**
+     * Get all chat sessions.
+     *
+     * @return List of session summaries
+     */
+    @GetMapping("/sessions")
+    public ResponseEntity<List<SessionSummary>> getSessions() {
+        log.info("Getting all chat sessions");
+
+        List<SessionSummary> sessions = ragAssistantService.getSessionSummaries().stream()
+            .map(info -> SessionSummary.builder()
+                .sessionId(info.sessionId())
+                .title(info.title())
+                .messageCount(info.messageCount())
+                .lastUpdated(info.lastUpdated())
+                .build())
+            .toList();
+
+        return ResponseEntity.ok(sessions);
+    }
+
+    /**
      * Clear session endpoint - removes conversation history.
      *
      * @param sessionId Session ID to clear

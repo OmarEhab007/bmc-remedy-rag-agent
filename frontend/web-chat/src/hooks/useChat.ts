@@ -176,6 +176,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return newState;
 
     case 'LOAD_SESSIONS':
+      saveSessionsToStorage(action.sessions);
       return { ...state, sessions: action.sessions };
 
     default:
@@ -244,6 +245,10 @@ export function useChat() {
     dispatch({ type: 'DELETE_MESSAGE', sessionId, messageId });
   }, []);
 
+  const loadSessions = useCallback((sessions: ChatSession[]) => {
+    dispatch({ type: 'LOAD_SESSIONS', sessions });
+  }, []);
+
   const activeSession = useMemo(() => {
     return state.sessions.find((s) => s.id === state.activeSessionId) || null;
   }, [state.sessions, state.activeSessionId]);
@@ -262,5 +267,6 @@ export function useChat() {
     setError,
     clearSession,
     deleteMessage,
+    loadSessions,
   };
 }

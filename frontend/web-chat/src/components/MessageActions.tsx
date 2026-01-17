@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface MessageActionsProps {
   role: 'user' | 'assistant';
@@ -17,6 +18,7 @@ export function MessageActions({
   onDelete,
   className = '',
 }: MessageActionsProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -47,8 +49,8 @@ export function MessageActions({
       <button
         onClick={handleCopy}
         className="action-button"
-        title={copied ? 'Copied!' : 'Copy'}
-        aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
+        title={copied ? t('common.copied') : t('common.copy')}
+        aria-label={copied ? t('messages.copiedToClipboard') : t('messages.copyToClipboard')}
       >
         {copied ? (
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -71,8 +73,8 @@ export function MessageActions({
         <button
           onClick={onEdit}
           className="action-button"
-          title="Edit message"
-          aria-label="Edit message"
+          title={t('messages.editMessage')}
+          aria-label={t('messages.editMessage')}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -90,8 +92,8 @@ export function MessageActions({
         <button
           onClick={onRegenerate}
           className="action-button"
-          title="Regenerate response"
-          aria-label="Regenerate response"
+          title={t('messages.regenerateResponse')}
+          aria-label={t('messages.regenerateResponse')}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -110,8 +112,8 @@ export function MessageActions({
           <button
             onClick={handleConfirmDelete}
             className="action-button text-error"
-            title="Confirm delete"
-            aria-label="Confirm delete message"
+            title={t('messages.confirmDelete')}
+            aria-label={t('messages.confirmDelete')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -121,8 +123,8 @@ export function MessageActions({
           <button
             onClick={handleDeleteClick}
             className="action-button"
-            title="Delete message"
-            aria-label="Delete message"
+            title={t('messages.deleteMessage')}
+            aria-label={t('messages.deleteMessage')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

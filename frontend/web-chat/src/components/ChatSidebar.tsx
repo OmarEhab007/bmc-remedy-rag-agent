@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ChatSession } from '../types/chat';
 import { ConfirmModal } from './Modal';
 
@@ -39,6 +40,7 @@ export function ChatSidebar({
   isOpen,
   onClose,
 }: ChatSidebarProps) {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filter sessions based on search query
@@ -101,7 +103,7 @@ export function ChatSidebar({
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              <span className="font-medium">New chat</span>
+              <span className="font-medium">{t('sidebar.newChat')}</span>
             </button>
           </div>
 
@@ -125,19 +127,19 @@ export function ChatSidebar({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search conversations..."
+                placeholder={t('sidebar.searchConversations')}
                 className="w-full pl-9 pr-8 py-2 text-sm bg-sidebar-hover border border-transparent
                          rounded-lg text-sidebar placeholder:text-sidebar-muted
                          focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent
                          transition-all"
-                aria-label="Search conversations"
+                aria-label={t('sidebar.searchConversations')}
               />
               {searchQuery && (
                 <button
                   onClick={handleClearSearch}
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded
                            text-sidebar-muted hover:text-sidebar transition-colors"
-                  aria-label="Clear search"
+                  aria-label={t('sidebar.clearSearch')}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -151,16 +153,16 @@ export function ChatSidebar({
           <div className="flex-1 overflow-y-auto sidebar-scroll px-2">
             {sessions.length === 0 ? (
               <div className="p-4 text-center text-sidebar-muted text-sm">
-                No conversations yet
+                {t('sidebar.noConversations')}
               </div>
             ) : filteredSessions.length === 0 ? (
               <div className="p-4 text-center text-sidebar-muted text-sm">
-                <p>No results for "{searchQuery}"</p>
+                <p>{t('sidebar.noResults')} "{searchQuery}"</p>
                 <button
                   onClick={handleClearSearch}
                   className="mt-2 text-accent hover:underline text-sm"
                 >
-                  Clear search
+                  {t('sidebar.clearSearch')}
                 </button>
               </div>
             ) : (
@@ -223,6 +225,7 @@ interface SessionItemProps {
 }
 
 function SessionItem({ session, isActive, onSelect, onDelete, searchQuery = '' }: SessionItemProps) {
+  const { t } = useTranslation();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleDeleteClick = (e: React.MouseEvent) => {
@@ -270,7 +273,7 @@ function SessionItem({ session, isActive, onSelect, onDelete, searchQuery = '' }
           <div className="text-xs text-sidebar-muted flex items-center gap-1">
             <span>{formattedDate}</span>
             <span>·</span>
-            <span>{session.messages.length} msgs</span>
+            <span>{session.messages.length} {t('sidebar.messages')}</span>
           </div>
         </div>
 
@@ -282,7 +285,7 @@ function SessionItem({ session, isActive, onSelect, onDelete, searchQuery = '' }
                      hover:bg-sidebar-hover text-sidebar-muted hover:text-error
                      focus:opacity-100 focus:outline-none
                      transition-all duration-150"
-          aria-label="Delete conversation"
+          aria-label={t('sidebar.deleteConversation')}
         >
           <svg
             className="w-4 h-4"
@@ -305,10 +308,10 @@ function SessionItem({ session, isActive, onSelect, onDelete, searchQuery = '' }
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleConfirmDelete}
-        title="Delete Conversation"
-        message={`Are you sure you want to delete "${session.title}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
+        title={t('modals.deleteConversation')}
+        message={`${t('modals.deleteConversationMessage').replace('this conversation', `"${session.title}"`)}`}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
         variant="danger"
       />
     </>

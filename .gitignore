@@ -20,6 +20,7 @@ release.properties
 .metals/
 .bloop/
 .ammonite/
+.claude/
 
 # Gradle (if any)
 .gradle/
@@ -65,3 +66,42 @@ docker/*.env
 # Application data
 data/
 embeddings/
+
+# Frontend (Node.js)
+frontend/web-chat/node_modules/
+frontend/web-chat/dist/
+frontend/web-chat/.turbo/
+frontend/web-chat/.vite/
+frontend/web-chat/build/
+frontend/web-chat/.eslintcache
+frontend/Frontend_Layer_Section.txt
+frontend/BMC_Remedy_RAG_Agent_Frontend_Layer_Design.docx
+
+# Documentation and notes (internal use only)
+creating_data_on_DB.txt
+*.docx
+Frontend_Layer_Section.txt
+BMC_Remedy_RAG_Agent_Frontend_Layer_Design.docx
+*.md.backup
+
+# Archives and distribution files
+frontend.zip
+*.tar.gz
+*.tar
+*.rar
+*.7z
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage reports
+coverage/
+*.lcov
+.nyc_output/
+
+# Misc
+.vagrant/
+!.gitattributes

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type FeedbackType = 'positive' | 'negative' | null;
 
@@ -13,6 +14,7 @@ export function FeedbackButtons({
   onFeedback,
   className = '',
 }: FeedbackButtonsProps) {
+  const { t } = useTranslation();
   const [feedback, setFeedback] = useState<FeedbackType>(null);
   const [showFeedbackInput, setShowFeedbackInput] = useState(false);
 
@@ -40,8 +42,8 @@ export function FeedbackButtons({
       <button
         onClick={() => handleFeedback('positive')}
         className={`feedback-button ${feedback === 'positive' ? 'active-positive' : ''}`}
-        title="Good response"
-        aria-label="Mark as good response"
+        title={t('messages.goodResponse')}
+        aria-label={t('messages.markAsGood')}
         aria-pressed={feedback === 'positive'}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -58,8 +60,8 @@ export function FeedbackButtons({
       <button
         onClick={() => handleFeedback('negative')}
         className={`feedback-button ${feedback === 'negative' ? 'active-negative' : ''}`}
-        title="Bad response"
-        aria-label="Mark as bad response"
+        title={t('messages.badResponse')}
+        aria-label={t('messages.markAsBad')}
         aria-pressed={feedback === 'negative'}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,6 +94,7 @@ interface FeedbackInputProps {
 }
 
 function FeedbackInput({ onSubmit, onClose }: FeedbackInputProps) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
 
   const handleSubmit = () => {
@@ -103,11 +106,11 @@ function FeedbackInput({ onSubmit, onClose }: FeedbackInputProps) {
 
   return (
     <div className="absolute bottom-full left-0 mb-2 p-3 bg-elevated border border-main rounded-lg shadow-lg w-72 animate-fade-in">
-      <p className="text-sm text-secondary mb-2">What was the issue? (optional)</p>
+      <p className="text-sm text-secondary mb-2">{t('feedback.whatWasIssue')}</p>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Provide additional feedback..."
+        placeholder={t('feedback.provideFeedback')}
         className="w-full p-2 text-sm border border-main rounded-lg resize-none bg-main text-main focus:outline-none focus:ring-2 focus:ring-accent"
         rows={2}
         autoFocus
@@ -117,14 +120,14 @@ function FeedbackInput({ onSubmit, onClose }: FeedbackInputProps) {
           onClick={onClose}
           className="px-3 py-1 text-sm text-muted hover:text-main"
         >
-          Skip
+          {t('common.skip')}
         </button>
         <button
           onClick={handleSubmit}
           className="px-3 py-1 text-sm bg-accent text-white rounded-md hover:bg-accent-dark"
           disabled={!text.trim()}
         >
-          Submit
+          {t('common.submit')}
         </button>
       </div>
     </div>

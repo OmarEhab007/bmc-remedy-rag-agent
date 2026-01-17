@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '../types/chat';
 import { CitationBlock, InlineCitation } from './CitationBlock';
@@ -24,6 +25,7 @@ export function MessageBubble({
   onEdit,
   onDelete,
 }: MessageBubbleProps) {
+  const { t } = useTranslation();
   const isUser = message.role === 'user';
   const isStreaming = message.isStreaming;
   const [isEditing, setIsEditing] = useState(false);
@@ -82,13 +84,13 @@ export function MessageBubble({
                     className="px-4 py-2 text-sm font-medium text-white rounded-lg"
                     style={{ backgroundColor: 'var(--color-accent)' }}
                   >
-                    Save & Submit
+                    {t('messages.saveAndSubmit')}
                   </button>
                   <button
                     onClick={handleCancelEdit}
                     className="px-4 py-2 text-sm font-medium text-secondary hover:text-main"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 </div>
               </div>
@@ -181,13 +183,13 @@ export function MessageBubble({
                 className="px-4 py-2 text-sm font-medium text-white rounded-lg"
                 style={{ backgroundColor: 'var(--color-accent)' }}
               >
-                Save & Submit
+                {t('messages.saveAndSubmit')}
               </button>
               <button
                 onClick={handleCancelEdit}
                 className="px-4 py-2 text-sm font-medium text-secondary hover:text-main"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -341,16 +343,17 @@ interface ConfidenceIndicatorProps {
 }
 
 function ConfidenceIndicator({ score }: ConfidenceIndicatorProps) {
+  const { t } = useTranslation();
   const percentage = Math.round(score * 100);
   let colorClass = 'text-success';
-  let label = 'High confidence';
+  let label = t('messages.highConfidence');
 
   if (score < 0.5) {
     colorClass = 'text-error';
-    label = 'Low confidence';
+    label = t('messages.lowConfidence');
   } else if (score < 0.75) {
     colorClass = 'text-warning';
-    label = 'Medium confidence';
+    label = t('messages.mediumConfidence');
   }
 
   return (

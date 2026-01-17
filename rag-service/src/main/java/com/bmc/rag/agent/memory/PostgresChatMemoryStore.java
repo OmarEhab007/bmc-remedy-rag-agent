@@ -123,6 +123,51 @@ public class PostgresChatMemoryStore implements ChatMemoryStore {
     }
 
     /**
+     * Session summary information.
+     */
+    public record SessionInfo(String sessionId, String title, int messageCount, long lastUpdated) {}
+
+    /**
+     * Get summaries of all sessions with title, message count, and last update time.
+     * Title is derived from the first user message in each session.
+     */
+    public List<SessionInfo> getSessionSummaries() {
+        String sql = """
+            WITH session_stats AS (
+                SELECT
+                    session_id,
+                    COUNT(*) as message_count,
+                    MAX(created_at) as last_updated
+                FROM chat_memory
+                GROUP BY session_id
+            ),
+            first_user_message AS (
+                SELECT DISTINCT ON (session_id)
+                    session_id,
+                    SUBSTRING(content, 1, 50) as title
+                FROM chat_memory
+                WHERE message_type = 'USER'
+                ORDER BY session_id, created_at ASC
+            )
+            SELECT
+                s.session_id,
+                COALESCE(f.title, 'New Conversation') as title,
+                s.message_count,
+                EXTRACT(EPOCH FROM s.last_updated) * 1000 as last_updated_millis
+            FROM session_stats s
+            LEFT JOIN first_user_message f ON s.session_id = f.session_id
+            ORDER BY s.last_updated DESC
+            """;
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new SessionInfo(
+            rs.getString("session_id"),
+            rs.getString("title"),
+            rs.getInt("message_count"),
+            rs.getLong("last_updated_millis")
+        ));
+    }
+
+    /**
      * Create a ChatMessage from type and content.
      */
     private ChatMessage createMessage(String type, String content) {

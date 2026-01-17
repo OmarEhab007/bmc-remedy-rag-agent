@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 
 interface ModalProps {
@@ -24,6 +25,7 @@ export function Modal({
   closeOnEscape = true,
   size = 'md',
 }: ModalProps) {
+  const { t } = useTranslation();
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
 
@@ -144,7 +146,7 @@ export function Modal({
               <button
                 onClick={onClose}
                 className="modal-close"
-                aria-label="Close dialog"
+                aria-label={t('modals.closeDialog')}
               >
                 <svg
                   className="w-5 h-5"
@@ -196,10 +198,12 @@ export function ConfirmModal({
   onConfirm,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   variant = 'default',
 }: ConfirmModalProps) {
+  const { t } = useTranslation();
+
   const handleConfirm = () => {
     onConfirm();
     onClose();
@@ -214,13 +218,13 @@ export function ConfirmModal({
       footer={
         <>
           <button onClick={onClose} className="btn-ghost">
-            {cancelText}
+            {cancelText || t('common.cancel')}
           </button>
           <button
             onClick={handleConfirm}
             className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}
           >
-            {confirmText}
+            {confirmText || t('common.confirm')}
           </button>
         </>
       }
