@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/logo.svg" alt="BMC Remedy RAG Agent Logo" width="200"/>
-</p>
-
 <h1 align="center">BMC Remedy RAG Agent</h1>
 
 <p align="center">
@@ -431,5 +427,3 @@ Proprietary - Copyright © 2025. All rights reserved.
 - **BMC Software** - AR System Java API
 
 ---
-
-**Built with** ❤️ **for enterprise ITSM workflows**
