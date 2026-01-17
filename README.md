@@ -1,11 +1,34 @@
-# BMC Remedy RAG Agent
+<p align="center">
+  <img src="assets/logo.svg" alt="BMC Remedy RAG Agent Logo" width="200"/>
+</p>
 
-> On-premise Retrieval-Augmented Generation (RAG) agent for BMC Remedy AR System ITSM data
+<h1 align="center">BMC Remedy RAG Agent</h1>
 
-[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-green.svg)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-19+-blue.svg)](https://react.dev/)
-[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
+<p align="center">
+  <b>🤖 On-premise Retrieval-Augmented Generation agent for BMC Remedy ITSM</b>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#api-endpoints">API</a> •
+  <a href="#deployment">Deployment</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-17+-orange?logo=java&logoColor=white" alt="Java"/>
+  <img src="https://img.shields.io/badge/Spring%20Boot-3.2.0-green?logo=springboot&logoColor=white" alt="Spring Boot"/>
+  <img src="https://img.shields.io/badge/LangChain4j-0.35.0-blue?logo=java&logoColor=white" alt="LangChain4j"/>
+  <img src="https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql&logoColor=white" alt="PostgreSQL"/>
+  <img src="https://img.shields.io/badge/pgvector-0.1.4-purple?logo=postgresql&logoColor=white" alt="pgvector"/>
+  <img src="https://img.shields.io/badge/React-19+-cyan?logo=react&logoColor=white" alt="React"/>
+  <img src="https://img.shields.io/badge/RAG-✓-brightgreen" alt="RAG"/>
+  <img src="https://img.shields.io/badge/ITSM-✓-blue" alt="ITSM"/>
+</p>
+
+<p align="center">
+  <i>Enterprise-grade AI for IT support workflows</i>
+</p>
 
 ## Overview
 

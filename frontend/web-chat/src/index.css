@@ -1690,10 +1690,13 @@ a:focus-visible {
   min-height: var(--touch-target-min);
 }
 
-/* Fix header buttons */
+/* Fix header buttons - ensure icons are centered */
 .header-minimal button {
   min-width: var(--touch-target-min);
   min-height: var(--touch-target-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Fix theme toggle */
@@ -2219,11 +2222,13 @@ a:focus-visible {
   transform: translateX(-50%);
 }
 
-/* Flex row reversals */
-[dir="rtl"] .flex.items-center.gap-3,
-[dir="rtl"] .flex.items-center.gap-1,
-[dir="rtl"] .flex.items-center.gap-2 {
-  flex-direction: row-reverse;
+/* Header icon buttons - no need to reverse, just keep centered */
+[dir="rtl"] .header-minimal .flex.items-center.gap-1 {
+  flex-direction: row;
+}
+
+[dir="rtl"] .header-minimal .flex.items-center.gap-3 {
+  flex-direction: row;
 }
 
 /* Input area */

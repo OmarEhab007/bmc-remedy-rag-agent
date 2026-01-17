@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BMC Remedy RAG Agent - Social Preview Generator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .preview {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .preview img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+        .instructions {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        h2 { color: #667eea; margin-top: 0; }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="instructions">
+            <h1>🎨 GitHub Repository Social Preview Setup</h1>
+            <p>Follow these steps to make your GitHub repository look professional and attractive!</p>
+
+            <div class="step">
+                <h3>Step 1: Add Social Preview Image</h3>
+                <p>Convert the <code>assets/social-preview.svg</code> to PNG and add it to your repository:</p>
+                <ol>
+                    <li>Open <code>assets/social-preview.svg</code> in a browser or design tool (Figma, Canva, etc.)</li>
+                    <li>Export as PNG at 1280x640 pixels</li>
+                    <li>Name it <code>social-preview.png</code></li>
+                    <li>Place it in the <code>assets/</code> folder or repository root</li>
+                </ol>
+                <p><strong>Quick conversion tools:</strong></p>
+                <ul>
+                    <li><a href="https://cloudconvert.com/svg-to-png" target="_blank">CloudConvert SVG to PNG</a></li>
+                    <li><a href="https://www.aconvert.com/image/svg-to-png/" target="_blank">AConvert SVG to PNG</a></li>
+                </ul>
+            </div>
+
+            <div class="step">
+                <h3>Step 2: Update Repository Settings on GitHub</h3>
+                <ol>
+                    <li>Go to your repository on GitHub</li>
+                    <li>Click <strong>Settings</strong> tab</li>
+                    <li>Scroll to <strong>About</strong> section</li>
+                    <li>Add these details:</li>
+                </ol>
+                <pre><code>Name: BMC Remedy RAG Agent
+Description: 🤖 On-premise RAG agent for BMC Remedy ITSM with local embeddings and semantic search | Java 17 • Spring Boot • LangChain4j • pgvector
+Website: https://your-docs-site.com (optional)</code></pre>
+            </div>
+
+            <div class="step">
+                <h3>Step 3: Add Repository Topics</h3>
+                <p>In the same Settings page, scroll to <strong>Topics</strong> and add these (max 20):</p>
+                <pre><code>rag, java, spring-boot, langchain4j, postgresql, pgvector,
+itsm, bmc-remedy, semantic-search, llm, embeddings,
+vector-database, generative-ai, microservices, docker,
+on-premise, air-gapped, react, typescript, enterprise</code></pre>
+            </div>
+
+            <div class="step">
+                <h3>Step 4: Set Repository Logo (Optional)</h3>
+                <p>GitHub doesn't natively support custom repository logos, but you can:</p>
+                <ul>
+                    <li><strong>Organization:</strong> If under an organization, set the organization avatar</li>
+                    <li><strong>Social Image:</strong> The social preview will be used when sharing</li>
+                    <li><strong>README Badge:</strong> Add the logo to your README:</li>
+                </ul>
+                <pre><code>&lt;img src="assets/logo.svg" alt="BMC Remedy RAG Agent" width="200"/&gt;</code></pre>
+            </div>
+
+            <div class="step">
+                <h3>Step 5: Enable GitHub Features</h3>
+                <p>In Settings, enable these features:</p>
+                <ul>
+                    <li>✅ <strong>Issues</strong> - For bug tracking and feature requests</li>
+                    <li>✅ <strong>Discussions</strong> - For community Q&A</li>
+                    <li>✅ <strong>Wikis</strong> - For detailed documentation (optional)</li>
+                    <li>✅ <strong>Actions</strong> - For CI/CD (if needed)</li>
+                    <li>❌ <strong>Projects</strong> - Unless you use project boards</li>
+                </ul>
+            </div>
+
+            <h2>🎯 Tips for a Professional Repository</h2>
+            <ul>
+                <li><strong>Badges in README:</strong> Add build status, version, and license badges</li>
+                <li><strong>Screenshots:</strong> Add GIFs or images showing the application in action</li>
+                <li><strong>Contributing:</strong> Add a CONTRIBUTING.md file</li>
+                <li><strong>Changelog:</strong> Maintain a CHANGELOG.md for version history</li>
+                <li><strong>License:</strong> Add a LICENSE file (even if proprietary)</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
