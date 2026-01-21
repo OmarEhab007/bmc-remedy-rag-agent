@@ -52,6 +52,10 @@ public final class FieldIdConstants {
         public static final int CUSTOMER_FIRST_NAME = 1000000018;  // First Name
         public static final int CUSTOMER_LAST_NAME = 1000000019;   // Last Name
         public static final int CUSTOMER_COMPANY = 1000000001;     // Company
+        public static final int CI_NAME = 1000000056;              // Configuration Item Name (CI)
+        public static final int LOCATION = 1000000082;             // Location
+        public static final int SCHEDULED_START = 1000000052;      // Scheduled Start Date
+        public static final int SCHEDULED_END = 1000000053;        // Scheduled End Date
 
         private Incident() {}
     }
@@ -86,13 +90,18 @@ public final class FieldIdConstants {
         public static final int ASSIGNED_SUPPORT_COMPANY = 1000000082; // Support Company
         public static final int PRIORITY = 1000000164;             // Priority (Enum)
         public static final int LOCATION_COMPANY = 1000000001;     // Location Company
+        public static final int LOCATION = 1000000082;             // Location
         public static final int REQUESTER_FIRST_NAME = 1000000018; // Requester First Name
         public static final int REQUESTER_LAST_NAME = 1000000019;  // Requester Last Name
         public static final int CATEGORY_TIER_1 = 1000000063;      // Categorization Tier 1
         public static final int CATEGORY_TIER_2 = 1000000064;      // Categorization Tier 2
         public static final int CATEGORY_TIER_3 = 1000000065;      // Categorization Tier 3
-        public static final int SCHEDULED_START_DATE = 1000000411; // Scheduled Start Date
-        public static final int SCHEDULED_END_DATE = 1000000412;   // Scheduled End Date
+        public static final int CI_NAME = 1000000056;              // Configuration Item Name (CI)
+        public static final int SCHEDULED_START_DATE = 1000000052; // Scheduled Start Date
+        public static final int SCHEDULED_END_DATE = 1000000053;   // Scheduled End Date
+        // Legacy field IDs (for backward compatibility with older AR System versions)
+        public static final int SCHEDULED_START_DATE_LEGACY = 1000000411;
+        public static final int SCHEDULED_END_DATE_LEGACY = 1000000412;
 
         private WorkOrder() {}
     }
@@ -224,6 +233,8 @@ public final class FieldIdConstants {
         public static final int CATEGORY_TIER_3 = 1000000065;      // Optional: Category tier 3
         public static final int ASSIGNED_GROUP = 1000000217;       // Optional: Initial assignment group
         public static final int SERVICE_TYPE = 1000000099;         // Optional: Service type
+        public static final int CI_NAME = 1000000056;              // Optional: Configuration Item name
+        public static final int LOCATION = 1000000082;             // Optional: Location
 
         // Enum values for required fields
         public static final class Impact {
@@ -269,12 +280,14 @@ public final class FieldIdConstants {
         public static final int REQUESTER_FIRST_NAME = 1000000018; // Optional: Requester first name
         public static final int REQUESTER_LAST_NAME = 1000000019;  // Optional: Requester last name
         public static final int LOCATION_COMPANY = 1000000001;     // Optional: Location company
+        public static final int LOCATION = 1000000082;             // Optional: Location
         public static final int CATEGORY_TIER_1 = 1000000063;      // Optional: Category tier 1
         public static final int CATEGORY_TIER_2 = 1000000064;      // Optional: Category tier 2
         public static final int CATEGORY_TIER_3 = 1000000065;      // Optional: Category tier 3
         public static final int ASSIGNED_GROUP = 1000000217;       // Optional: Assignment group
-        public static final int SCHEDULED_START_DATE = 1000000411; // Optional: Scheduled start
-        public static final int SCHEDULED_END_DATE = 1000000412;   // Optional: Scheduled end
+        public static final int CI_NAME = 1000000056;              // Optional: Configuration Item name
+        public static final int SCHEDULED_START_DATE = 1000000052; // Optional: Scheduled start
+        public static final int SCHEDULED_END_DATE = 1000000053;   // Optional: Scheduled end
 
         // Enum values for required fields
         public static final class WorkOrderType {

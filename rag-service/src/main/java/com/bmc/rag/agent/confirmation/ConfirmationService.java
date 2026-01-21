@@ -1,15 +1,21 @@
 package com.bmc.rag.agent.confirmation;
 
+import com.bmc.rag.agent.security.AgenticRateLimiter;
 import com.bmc.rag.connector.creator.IncidentCreator;
+import com.bmc.rag.connector.creator.IncidentUpdater;
 import com.bmc.rag.connector.creator.WorkOrderCreator;
 import com.bmc.rag.connector.dto.CreationResult;
 import com.bmc.rag.connector.dto.IncidentCreationRequest;
+import com.bmc.rag.connector.dto.IncidentUpdateRequest;
 import com.bmc.rag.connector.dto.WorkOrderCreationRequest;
+import com.bmc.rag.store.entity.ActionAuditEntity;
+import com.bmc.rag.store.repository.ActionAuditRepository;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -26,16 +32,25 @@ import java.util.stream.Collectors;
 public class ConfirmationService {
 
     private final IncidentCreator incidentCreator;
+    private final IncidentUpdater incidentUpdater;
     private final WorkOrderCreator workOrderCreator;
+    private final ActionAuditRepository auditRepository;
+    private final AgenticRateLimiter rateLimiter;
     private final Cache<String, PendingAction> pendingActions;
     private final Duration confirmationTimeout;
 
     public ConfirmationService(
             IncidentCreator incidentCreator,
+            IncidentUpdater incidentUpdater,
             WorkOrderCreator workOrderCreator,
+            ActionAuditRepository auditRepository,
+            AgenticRateLimiter rateLimiter,
             @Value("${agentic.confirmation.timeout-minutes:5}") int timeoutMinutes) {
         this.incidentCreator = incidentCreator;
+        this.incidentUpdater = incidentUpdater;
         this.workOrderCreator = workOrderCreator;
+        this.auditRepository = auditRepository;
+        this.rateLimiter = rateLimiter;
         this.confirmationTimeout = Duration.ofMinutes(timeoutMinutes);
 
         // Initialize cache with TTL slightly longer than timeout for cleanup margin
@@ -59,6 +74,7 @@ public class ConfirmationService {
      * @param request The incident creation request
      * @return The pending action with confirmation details
      */
+    @Transactional
     public PendingAction stageIncidentCreation(
             String sessionId,
             String userId,
@@ -73,6 +89,17 @@ public class ConfirmationService {
             sessionId, userId, request, preview, expiresAt);
 
         pendingActions.put(action.getActionId(), action);
+
+        // Persist audit record
+        ActionAuditEntity audit = ActionAuditEntity.forStaged(
+            action.getActionId(),
+            sessionId,
+            userId,
+            ActionAuditEntity.ActionType.INCIDENT_CREATE,
+            preview
+        );
+        auditRepository.save(audit);
+
         log.info("Staged action {} expires at {}", action.getActionId(), expiresAt);
 
         return action;
@@ -86,6 +113,7 @@ public class ConfirmationService {
      * @param request The work order creation request
      * @return The pending action with confirmation details
      */
+    @Transactional
     public PendingAction stageWorkOrderCreation(
             String sessionId,
             String userId,
@@ -100,7 +128,58 @@ public class ConfirmationService {
             sessionId, userId, request, preview, expiresAt);
 
         pendingActions.put(action.getActionId(), action);
+
+        // Persist audit record
+        ActionAuditEntity audit = ActionAuditEntity.forStaged(
+            action.getActionId(),
+            sessionId,
+            userId,
+            ActionAuditEntity.ActionType.WORK_ORDER_CREATE,
+            preview
+        );
+        auditRepository.save(audit);
+
         log.info("Staged action {} expires at {}", action.getActionId(), expiresAt);
+
+        return action;
+    }
+
+    /**
+     * Stage an incident update action for confirmation.
+     *
+     * @param sessionId The user's session ID
+     * @param userId The user's ID
+     * @param request The incident update request
+     * @return The pending action with confirmation details
+     */
+    @Transactional
+    public PendingAction stageIncidentUpdate(
+            String sessionId,
+            String userId,
+            IncidentUpdateRequest request) {
+
+        log.info("Staging incident update for {} by user {} in session {}",
+            request.getIncidentNumber(), userId, sessionId);
+
+        Instant expiresAt = Instant.now().plus(confirmationTimeout);
+        String preview = request.toPreviewString();
+
+        PendingAction action = PendingAction.forIncidentUpdate(
+            sessionId, userId, request, preview, expiresAt);
+
+        pendingActions.put(action.getActionId(), action);
+
+        // Persist audit record
+        ActionAuditEntity audit = ActionAuditEntity.forStaged(
+            action.getActionId(),
+            sessionId,
+            userId,
+            ActionAuditEntity.ActionType.INCIDENT_UPDATE,
+            preview
+        );
+        auditRepository.save(audit);
+
+        log.info("Staged update action {} expires at {}", action.getActionId(), expiresAt);
 
         return action;
     }
@@ -152,6 +231,7 @@ public class ConfirmationService {
      * @param userId The user's ID
      * @return The cancellation result
      */
+    @Transactional
     public ConfirmationResult cancel(String actionId, String sessionId, String userId) {
         log.info("Cancelling action {} for user {} in session {}", actionId, userId, sessionId);
 
@@ -176,6 +256,13 @@ public class ConfirmationService {
 
         action.cancel();
         pendingActions.invalidate(actionId);
+
+        // Update audit record
+        auditRepository.findByActionId(actionId)
+            .ifPresent(audit -> {
+                audit.markCancelled();
+                auditRepository.save(audit);
+            });
 
         return ConfirmationResult.cancelled("Action cancelled successfully");
     }
@@ -213,12 +300,17 @@ public class ConfirmationService {
     /**
      * Execute a confirmed action.
      */
+    @Transactional
     private ConfirmationResult executeAction(PendingAction action) {
         try {
             CreationResult result = switch (action.getActionType()) {
                 case INCIDENT_CREATE -> {
                     IncidentCreationRequest request = (IncidentCreationRequest) action.getPayload();
                     yield incidentCreator.createIncident(request);
+                }
+                case INCIDENT_UPDATE -> {
+                    IncidentUpdateRequest request = (IncidentUpdateRequest) action.getPayload();
+                    yield incidentUpdater.updateIncident(request);
                 }
                 case WORK_ORDER_CREATE -> {
                     WorkOrderCreationRequest request = (WorkOrderCreationRequest) action.getPayload();
@@ -229,16 +321,43 @@ public class ConfirmationService {
 
             if (result.isSuccess()) {
                 action.markExecuted(result.getRecordId(), result.toUserMessage());
+
+                // Record rate limit ONLY on successful execution
+                rateLimiter.recordAction(action.getUserId());
+
+                // Update audit record
+                auditRepository.findByActionId(action.getActionId())
+                    .ifPresent(audit -> {
+                        audit.markExecuted(result.getRecordId());
+                        auditRepository.save(audit);
+                    });
+
                 log.info("Action {} executed successfully: {}", action.getActionId(), result.getRecordId());
                 return ConfirmationResult.success(result.getRecordId(), result.toUserMessage());
             } else {
                 action.markFailed(result.getErrorMessage());
+
+                // Update audit record
+                auditRepository.findByActionId(action.getActionId())
+                    .ifPresent(audit -> {
+                        audit.markFailed(result.getErrorMessage());
+                        auditRepository.save(audit);
+                    });
+
                 log.error("Action {} failed: {}", action.getActionId(), result.getErrorMessage());
                 return ConfirmationResult.failure(result.getErrorMessage());
             }
         } catch (Exception e) {
             String errorMessage = "Execution failed: " + e.getMessage();
             action.markFailed(errorMessage);
+
+            // Update audit record
+            auditRepository.findByActionId(action.getActionId())
+                .ifPresent(audit -> {
+                    audit.markFailed(errorMessage);
+                    auditRepository.save(audit);
+                });
+
             log.error("Action {} threw exception: {}", action.getActionId(), e.getMessage(), e);
             return ConfirmationResult.failure(errorMessage);
         } finally {

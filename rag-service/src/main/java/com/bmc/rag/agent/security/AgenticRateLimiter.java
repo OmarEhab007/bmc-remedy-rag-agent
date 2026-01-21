@@ -40,8 +40,8 @@ public class AgenticRateLimiter {
     }
 
     /**
-     * Check if a user has exceeded their creation rate limit.
-     * If not exceeded, increments the counter.
+     * Check if a user would exceed their rate limit for the next action.
+     * Does NOT increment the counter - use recordAction() after successful execution.
      *
      * @param userId The user ID to check
      * @return true if rate limited (action should be blocked), false if allowed
@@ -52,17 +52,34 @@ public class AgenticRateLimiter {
             return true;
         }
 
-        AtomicInteger counter = userCounters.get(userId, k -> new AtomicInteger(0));
-        int currentCount = counter.incrementAndGet();
+        AtomicInteger counter = userCounters.getIfPresent(userId);
+        int currentCount = counter != null ? counter.get() : 0;
 
-        if (currentCount > maxCreationsPerHour) {
-            log.warn("User {} exceeded agentic rate limit ({}/hour), current: {}",
+        if (currentCount >= maxCreationsPerHour) {
+            log.warn("User {} would exceed agentic rate limit ({}/hour), current: {}",
                 userId, maxCreationsPerHour, currentCount);
             return true;
         }
 
         log.debug("User {} action count: {}/{}", userId, currentCount, maxCreationsPerHour);
         return false;
+    }
+
+    /**
+     * Record a successful action execution.
+     * Call this ONLY after an action has been successfully executed (not on staging or checking).
+     *
+     * @param userId The user ID that executed the action
+     */
+    public void recordAction(String userId) {
+        if (userId == null || userId.isBlank()) {
+            log.warn("Cannot record action for null/blank userId");
+            return;
+        }
+
+        AtomicInteger counter = userCounters.get(userId, k -> new AtomicInteger(0));
+        int newCount = counter.incrementAndGet();
+        log.info("Recorded action for user {}: {}/{}", userId, newCount, maxCreationsPerHour);
     }
 
     /**

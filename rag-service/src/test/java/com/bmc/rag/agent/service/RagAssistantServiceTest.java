@@ -1,9 +1,11 @@
 package com.bmc.rag.agent.service;
 
 import com.bmc.rag.agent.config.AgenticConfig;
+import com.bmc.rag.agent.config.GoogleAiConfig;
 import com.bmc.rag.agent.config.RagConfig;
 import com.bmc.rag.agent.config.ZaiConfig;
 import com.bmc.rag.agent.memory.PostgresChatMemoryStore;
+import com.bmc.rag.agent.metrics.RagMetricsService;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
@@ -49,6 +51,12 @@ class RagAssistantServiceTest {
     @Mock
     private AgenticConfig agenticConfig;
 
+    @Mock
+    private GoogleAiConfig googleAiConfig;
+
+    @Mock
+    private RagMetricsService metricsService;
+
     private RagAssistantService ragAssistantService;
 
     @BeforeEach
@@ -65,7 +73,9 @@ class RagAssistantServiceTest {
             chatMemoryStore,
             ragConfig,
             zaiConfig,
-            agenticConfig
+            googleAiConfig,
+            agenticConfig,
+            metricsService
         );
     }
 

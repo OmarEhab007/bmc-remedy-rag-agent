@@ -65,6 +65,17 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/api/v1/health/**").permitAll()
 
+                // Static admin files (dashboards)
+                .requestMatchers("/admin/**").permitAll()
+
+                // Metrics endpoints for dashboards (read-only, safe to expose)
+                .requestMatchers("/api/v1/metrics/**").permitAll()
+
+                // OpenAI-compatible API endpoints for Open WebUI (dev mode - no auth required)
+                // These endpoints allow Open WebUI to connect without authentication.
+                // For production, consider adding API key validation in a filter.
+                .requestMatchers("/v1/**").permitAll()
+
                 // Admin endpoints require ADMIN role
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

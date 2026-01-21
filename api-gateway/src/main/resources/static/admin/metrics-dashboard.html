@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Metrics Dashboard - Damee</title>
+    <style>
+        :root {
+            --primary-color: #0066cc;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --text-muted: #6c757d;
+            --border-color: #e9ecef;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .header .subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .refresh-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .refresh-btn {
+            padding: 8px 16px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background-color: #0055aa;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border-color);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .card-icon {
+            font-size: 24px;
+        }
+
+        .metric {
+            margin-bottom: 16px;
+        }
+
+        .metric:last-child {
+            margin-bottom: 0;
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+
+        .metric-value.small {
+            font-size: 20px;
+        }
+
+        .metric-unit {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: normal;
+            margin-left: 4px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background-color: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.success { background-color: var(--success-color); }
+        .progress-fill.warning { background-color: var(--warning-color); }
+        .progress-fill.danger { background-color: var(--danger-color); }
+        .progress-fill.primary { background-color: var(--primary-color); }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-indicator.good { background-color: var(--success-color); }
+        .status-indicator.warning { background-color: var(--warning-color); }
+        .status-indicator.bad { background-color: var(--danger-color); }
+
+        .latency-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .latency-item {
+            text-align: center;
+            padding: 12px;
+            background-color: var(--bg-color);
+            border-radius: 8px;
+        }
+
+        .latency-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .latency-value {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+
+        .error {
+            color: var(--danger-color);
+            padding: 16px;
+            background-color: #fff5f5;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .latency-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>RAG Metrics Dashboard</h1>
+                <div class="subtitle">Damee IT Support Agent - Real-time Performance Monitoring</div>
+            </div>
+            <div class="refresh-info">
+                <span id="lastUpdate">Last updated: --</span>
+                <button class="refresh-btn" onclick="fetchMetrics()">Refresh</button>
+            </div>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading metrics...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1/metrics/rag/summary';
+
+        async function fetchMetrics() {
+            try {
+                // Check if page is opened from file:// protocol
+                if (window.location.protocol === 'file:') {
+                    throw new Error('Dashboard must be accessed via HTTP. Please open: http://localhost:8080/admin/metrics-dashboard.html');
+                }
+
+                const response = await fetch(API_BASE);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const data = await response.json();
+                renderMetrics(data);
+                document.getElementById('lastUpdate').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Metrics fetch error:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="error">
+                        Failed to load metrics: ${error.message}<br>
+                        <small style="color: #666; display: block; margin-top: 8px;">
+                            Make sure the dashboard is accessed at:<br>
+                            <code>http://localhost:8080/admin/metrics-dashboard.html</code>
+                        </small>
+                        <button class="refresh-btn" style="margin-top: 12px" onclick="fetchMetrics()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderMetrics(data) {
+            const { retrievals, latency, quality, cache, errors } = data;
+
+            const groundednessStatus = quality.groundednessScore >= 0.8 ? 'good' :
+                                       quality.groundednessScore >= 0.6 ? 'warning' : 'bad';
+            const cacheStatus = cache.hitRate >= 0.7 ? 'good' :
+                               cache.hitRate >= 0.4 ? 'warning' : 'bad';
+            const hallucinationStatus = quality.hallucinationsDetected === 0 ? 'good' :
+                                        quality.hallucinationsDetected < 5 ? 'warning' : 'bad';
+
+            document.getElementById('content').innerHTML = `
+                <div class="grid">
+                    <!-- Retrievals Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Retrievals</span>
+                            <span class="card-icon">🔍</span>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Total Retrievals</div>
+                            <div class="metric-value">${formatNumber(retrievals.total)}</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Active Now</div>
+                            <div class="metric-value small">${retrievals.active}</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Last Retrieval Documents</div>
+                            <div class="metric-value small">${retrievals.lastCount}</div>
+                        </div>
+                    </div>
+
+                    <!-- Quality Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Response Quality</span>
+                            <span class="card-icon">✅</span>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">
+                                <span class="status-indicator ${groundednessStatus}"></span>
+                                Groundedness Score
+                            </div>
+                            <div class="metric-value">${Math.round(quality.groundednessScore * 100)}%</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill ${groundednessStatus === 'good' ? 'success' : groundednessStatus === 'warning' ? 'warning' : 'danger'}"
+                                     style="width: ${quality.groundednessScore * 100}%"></div>
+                            </div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">
+                                <span class="status-indicator ${hallucinationStatus}"></span>
+                                Hallucinations Detected
+                            </div>
+                            <div class="metric-value small">${quality.hallucinationsDetected}</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Total Citations</div>
+                            <div class="metric-value small">${formatNumber(quality.citations)}</div>
+                        </div>
+                    </div>
+
+                    <!-- Cache Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Semantic Cache</span>
+                            <span class="card-icon">⚡</span>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">
+                                <span class="status-indicator ${cacheStatus}"></span>
+                                Hit Rate
+                            </div>
+                            <div class="metric-value">${Math.round(cache.hitRate * 100)}%</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill primary" style="width: ${cache.hitRate * 100}%"></div>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Hits</span>
+                            <span class="metric-value small">${formatNumber(cache.hits)}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Misses</span>
+                            <span class="metric-value small">${formatNumber(cache.misses)}</span>
+                        </div>
+                    </div>
+
+                    <!-- Errors Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Errors</span>
+                            <span class="card-icon">⚠️</span>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Total Errors</div>
+                            <div class="metric-value" style="color: ${errors.total > 0 ? 'var(--danger-color)' : 'var(--success-color)'}">
+                                ${errors.total}
+                            </div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Error Rate</div>
+                            <div class="metric-value small">
+                                ${retrievals.total > 0 ? ((errors.total / retrievals.total) * 100).toFixed(2) : 0}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Latency Card (Full Width) -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Latency Percentiles</span>
+                        <span class="card-icon">⏱️</span>
+                    </div>
+                    <div class="latency-grid">
+                        <div class="latency-item">
+                            <div class="latency-label">Retrieval P50</div>
+                            <div class="latency-value">${formatLatency(latency.retrievalP50Ms)}</div>
+                        </div>
+                        <div class="latency-item">
+                            <div class="latency-label">Retrieval P95</div>
+                            <div class="latency-value">${formatLatency(latency.retrievalP95Ms)}</div>
+                        </div>
+                        <div class="latency-item">
+                            <div class="latency-label">Generation P50</div>
+                            <div class="latency-value">${formatLatency(latency.generationP50Ms)}</div>
+                        </div>
+                        <div class="latency-item">
+                            <div class="latency-label">Generation P95</div>
+                            <div class="latency-value">${formatLatency(latency.generationP95Ms)}</div>
+                        </div>
+                        <div class="latency-item">
+                            <div class="latency-label">Total P50</div>
+                            <div class="latency-value">${formatLatency(latency.totalP50Ms)}</div>
+                        </div>
+                        <div class="latency-item">
+                            <div class="latency-label">Total P95</div>
+                            <div class="latency-value">${formatLatency(latency.totalP95Ms)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function formatLatency(ms) {
+            if (ms >= 1000) return (ms / 1000).toFixed(2) + 's';
+            return ms.toFixed(0) + 'ms';
+        }
+
+        // Initial fetch
+        fetchMetrics();
+
+        // Auto-refresh every 30 seconds
+        setInterval(fetchMetrics, 30000);
+    </script>
+</body>
+</html>

@@ -99,6 +99,19 @@ public class IncidentCreationRequest {
     private String serviceType;
 
     /**
+     * Configuration Item (CI) name.
+     * Links the incident to a specific asset/service in the CMDB.
+     */
+    @Size(max = 255, message = "Configuration item must not exceed 255 characters")
+    private String configurationItem;
+
+    /**
+     * Location.
+     */
+    @Size(max = 120, message = "Location must not exceed 120 characters")
+    private String location;
+
+    /**
      * User ID of the person creating the incident (for audit purposes).
      */
     private String createdBy;
@@ -180,6 +193,14 @@ public class IncidentCreationRequest {
 
         if (assignedGroup != null) {
             sb.append("**Assigned Group:** ").append(assignedGroup).append("\n");
+        }
+
+        if (configurationItem != null) {
+            sb.append("**Configuration Item:** ").append(configurationItem).append("\n");
+        }
+
+        if (location != null) {
+            sb.append("**Location:** ").append(location).append("\n");
         }
 
         return sb.toString();

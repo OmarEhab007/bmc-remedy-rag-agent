@@ -1,5 +1,7 @@
 package com.bmc.rag.api.controller;
 
+import com.bmc.rag.agent.damee.GuidedServiceCreator;
+import com.bmc.rag.agent.damee.GuidedServiceCreator.GuidedResponse;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever.RetrievalResult;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever.UserContext;
@@ -30,6 +32,7 @@ public class ChatController {
 
     private final RagAssistantService ragAssistantService;
     private final SecureContentRetriever contentRetriever;
+    private final GuidedServiceCreator guidedServiceCreator;
 
     /**
      * Chat endpoint - sends a message and receives a response.
@@ -55,8 +58,31 @@ public class ChatController {
         // Build user context for ReBAC
         UserContext userContext = buildUserContext(request);
 
+        // FIRST: Check for active guided service flow
+        // This ensures continuity when user responds with "1", "yes", "confirm" etc.
+        if (guidedServiceCreator.hasActiveFlow(sessionId)) {
+            log.info("Active guided flow found for session {}, processing response", sessionId);
+            try {
+                String userId = request.getUserId() != null ? request.getUserId() : "session:" + sessionId;
+                GuidedResponse guidedResponse = guidedServiceCreator.processMessage(
+                    sessionId, userId, request.getQuestion());
+                if (guidedResponse != null) {
+                    return ResponseEntity.ok(ChatResponse.builder()
+                        .sessionId(sessionId)
+                        .response(formatGuidedResponse(guidedResponse))
+                        .sources(Collections.emptyList())
+                        .hasContext(true)
+                        .timestamp(System.currentTimeMillis())
+                        .build());
+                }
+            } catch (Exception e) {
+                log.error("Error processing guided flow: {}", e.getMessage(), e);
+                // Fall through to normal processing
+            }
+        }
+
         // Process the chat request with agentic support
-        RagAssistantService.ChatResponse serviceResponse;
+        RagAssistantService.ChatResponseDto serviceResponse;
         if (request.isSkipContext()) {
             serviceResponse = ragAssistantService.chatWithoutContext(sessionId, request.getQuestion());
         } else {
@@ -206,6 +232,25 @@ public class ChatController {
             : Collections.emptySet();
 
         return new UserContext(request.getUserId(), groups);
+    }
+
+    /**
+     * Format a GuidedResponse into a user-friendly message.
+     */
+    private String formatGuidedResponse(GuidedResponse response) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(response.getMessage());
+
+        // Add options if available
+        if (response.getOptions() != null && !response.getOptions().isEmpty()) {
+            sb.append("\n\n");
+            for (int i = 0; i < response.getOptions().size(); i++) {
+                GuidedResponse.Option opt = response.getOptions().get(i);
+                sb.append(String.format("**%d.** %s\n", i + 1, opt.getLabel()));
+            }
+        }
+
+        return sb.toString();
     }
 
     /**

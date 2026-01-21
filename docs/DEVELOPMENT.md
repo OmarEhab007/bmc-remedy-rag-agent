@@ -1,7 +1,90 @@
 # BMC Remedy RAG Agent - Development Guide
 
-> **For Developers contributing to this project**
-> **Last Updated:** 2025-01-17
+> **Comprehensive guide for developers contributing to this project**
+> **Last Updated:** 2026-01-20
+
+---
+
+## Development Overview
+
+### Development Workflow Diagram
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart LR
+    subgraph Setup["🔧 Setup"]
+        A["Clone Repo"]
+        B["Install Dependencies"]
+        C["Configure Environment"]
+    end
+
+    subgraph Develop["💻 Develop"]
+        D["Create Feature Branch"]
+        E["Write Code"]
+        F["Write Tests"]
+    end
+
+    subgraph Validate["✅ Validate"]
+        G["Run Tests"]
+        H["Lint & Format"]
+        I["Build"]
+    end
+
+    subgraph Submit["📤 Submit"]
+        J["Commit"]
+        K["Push"]
+        L["Create PR"]
+    end
+
+    A --> B --> C --> D
+    D --> E --> F --> G
+    G --> H --> I --> J
+    J --> K --> L
+
+    style A fill:#DBEAFE,stroke:#3B82F6
+    style L fill:#D1FAE5,stroke:#10B981
+```
+
+### Project Architecture Overview
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    subgraph Frontend["🎨 Frontend"]
+        FE["frontend/web-chat<br/>React 19 + TypeScript"]
+    end
+
+    subgraph Backend["⚙️ Backend Modules"]
+        API["api-gateway<br/>REST • WebSocket"]
+        RAG["rag-service<br/>LangChain4j"]
+        VS["vector-store<br/>pgvector"]
+        VE["vectorization-engine<br/>ONNX"]
+        RC["remedy-connector<br/>BMC API"]
+    end
+
+    subgraph External["🌐 External"]
+        PG[("PostgreSQL")]
+        BMC["BMC Remedy"]
+        LLM["Ollama/Z.AI"]
+    end
+
+    FE --> API
+    API --> RAG
+    RAG --> VS
+    RAG --> LLM
+    VS --> VE
+    VS --> PG
+    VE --> RC
+    RC --> BMC
+
+    classDef frontend fill:#DBEAFE,stroke:#3B82F6
+    classDef backend fill:#D1FAE5,stroke:#10B981
+    classDef external fill:#F3E8FF,stroke:#8B5CF6
+
+    class FE frontend
+    class API,RAG,VS,VE,RC backend
+    class PG,BMC,LLM external
+```
 
 ---
 
@@ -362,6 +445,49 @@ log.error("Error");  // Missing context
 
 ## 5. Testing
 
+### Testing Strategy
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+graph TB
+    subgraph Pyramid["🔺 Testing Pyramid"]
+        E2E["🌐 E2E Tests<br/>Cypress / Playwright<br/>Few & Slow"]
+        Integration["🔗 Integration Tests<br/>Testcontainers + Spring<br/>Some & Medium"]
+        Unit["⚙️ Unit Tests<br/>JUnit 5 + Mockito<br/>Many & Fast"]
+    end
+
+    E2E --> Integration
+    Integration --> Unit
+
+    style E2E fill:#FEE2E2,stroke:#EF4444
+    style Integration fill:#FEF3C7,stroke:#F59E0B
+    style Unit fill:#D1FAE5,stroke:#10B981
+```
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart LR
+    subgraph Coverage["📊 Coverage Requirements"]
+        A["Unit Tests<br/>≥ 70% line coverage"]
+        B["Integration Tests<br/>Critical paths 90%"]
+        C["E2E Tests<br/>Happy paths"]
+    end
+
+    subgraph Tools["🛠️ Testing Tools"]
+        D["JUnit 5"]
+        E["Mockito"]
+        F["Testcontainers"]
+        G["AssertJ"]
+        H["Spring Boot Test"]
+    end
+
+    A --> D
+    A --> E
+    A --> G
+    B --> F
+    B --> H
+```
+
 ### 5.1 Unit Tests
 
 Located in `src/test/java/` alongside source files.
@@ -509,6 +635,54 @@ grep "CITATION" docs/DOCUMENTATION.md
 
 ## 7. Contributing
 
+### Git Workflow Diagram
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+gitGraph
+    commit id: "main"
+    branch feature/my-feature
+    checkout feature/my-feature
+    commit id: "feat: add new tool"
+    commit id: "test: add tests"
+    commit id: "fix: address review"
+    checkout main
+    merge feature/my-feature id: "Merge PR #123"
+    commit id: "release v1.2.0"
+```
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart LR
+    subgraph Local["💻 Local"]
+        A["Fork Repo"]
+        B["Create Branch"]
+        C["Make Changes"]
+        D["Run Tests"]
+        E["Commit"]
+    end
+
+    subgraph Remote["☁️ Remote"]
+        F["Push Branch"]
+        G["Create PR"]
+        H["Code Review"]
+        I["CI Checks"]
+    end
+
+    subgraph Merge["✅ Merge"]
+        J["Approve PR"]
+        K["Merge to Main"]
+        L["Delete Branch"]
+    end
+
+    A --> B --> C --> D --> E
+    E --> F --> G --> H
+    H --> I --> J --> K --> L
+
+    style A fill:#DBEAFE,stroke:#3B82F6
+    style K fill:#D1FAE5,stroke:#10B981
+```
+
 ### 7.1 Pull Request Process
 
 1. Fork the repository
@@ -552,7 +726,7 @@ feat(rag-service): add bilingual error messages
 Add Arabic and English error messages for insufficient context scenarios.
 Improve user feedback when no relevant information is found.
 
-Co-Authored-By: Claude <noreply@anthropic.com>
+
 ```
 
 ### 7.3 Code Review Guidelines
@@ -908,5 +1082,770 @@ curl -X POST http://localhost:8080/api/v1/chat \
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2025-01-17
+## 13. Adding New Features
+
+### 13.1 Adding a New LangChain4j Tool
+
+1. **Create the tool class** in `rag-service/src/main/java/com/bmc/rag/agent/tools/`:
+
+```java
+package com.bmc.rag.agent.tools;
+
+import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.P;
+import org.springframework.stereotype.Component;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class NewFeatureTool {
+
+    private final SomeDependency dependency;
+
+    @Tool("Description of what this tool does - be specific and clear")
+    public String performAction(
+            @P("Parameter description") String param1,
+            @P("Another parameter") int param2) {
+
+        log.info("Performing action with param1={}, param2={}", param1, param2);
+
+        try {
+            // Implementation
+            return "Success: " + result;
+        } catch (Exception e) {
+            log.error("Action failed: {}", e.getMessage(), e);
+            return "Error: " + e.getMessage();
+        }
+    }
+}
+```
+
+2. **Register in RagConfig** in `rag-service/src/main/java/com/bmc/rag/agent/config/RagConfig.java`:
+
+```java
+@Bean
+public AiServices<Assistant> assistant(
+        ChatLanguageModel model,
+        NewFeatureTool newFeatureTool,
+        // ... other tools
+        ) {
+    return AiServices.builder(Assistant.class)
+        .chatLanguageModel(model)
+        .tools(newFeatureTool, /* other tools */)
+        .build();
+}
+```
+
+3. **Add tests** in `rag-service/src/test/java/com/bmc/rag/agent/tools/`:
+
+```java
+@ExtendWith(MockitoExtension.class)
+class NewFeatureToolTest {
+
+    @Mock
+    private SomeDependency dependency;
+
+    @InjectMocks
+    private NewFeatureTool tool;
+
+    @Test
+    void performAction_WithValidParams_ReturnsSuccess() {
+        // Given
+        when(dependency.someMethod(any())).thenReturn(expectedResult);
+
+        // When
+        String result = tool.performAction("param1", 42);
+
+        // Then
+        assertThat(result).startsWith("Success:");
+        verify(dependency).someMethod(any());
+    }
+}
+```
+
+### 13.2 Adding a New API Endpoint
+
+1. **Create DTOs** in `api-gateway/src/main/java/com/bmc/rag/api/dto/`:
+
+```java
+// Request DTO
+public record NewFeatureRequest(
+    @NotBlank String field1,
+    @Min(1) int field2,
+    @Valid List<String> items
+) {}
+
+// Response DTO
+public record NewFeatureResponse(
+    String result,
+    int count,
+    Instant timestamp
+) {}
+```
+
+2. **Create Controller** in `api-gateway/src/main/java/com/bmc/rag/api/controller/`:
+
+```java
+@RestController
+@RequestMapping("/api/v1/new-feature")
+@RequiredArgsConstructor
+@Slf4j
+public class NewFeatureController {
+
+    private final NewFeatureService service;
+
+    @PostMapping
+    public ResponseEntity<NewFeatureResponse> create(
+            @Valid @RequestBody NewFeatureRequest request) {
+        log.info("New feature request: {}", request);
+
+        try {
+            var result = service.process(request);
+            return ResponseEntity.ok(result);
+        } catch (ValidationException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<NewFeatureResponse> getById(@PathVariable String id) {
+        return service.findById(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+}
+```
+
+3. **Create Service** in the appropriate module.
+
+4. **Add to SecurityConfig** if authentication is required:
+
+```java
+.requestMatchers("/api/v1/new-feature/**").authenticated()
+```
+
+### 13.3 Adding a New Remedy Field
+
+1. **Add to FieldIdConstants** in `remedy-connector/src/main/java/com/bmc/rag/connector/util/FieldIdConstants.java`:
+
+```java
+// New field for XYZ feature
+public static final int NEW_FIELD_ID = 1000000XXX;
+public static final String NEW_FIELD_NAME = "New Field";
+```
+
+2. **Update IncidentRecord DTO** in `remedy-connector/src/main/java/com/bmc/rag/connector/dto/`:
+
+```java
+public record IncidentRecord(
+    String incidentNumber,
+    String summary,
+    // ... existing fields
+    String newField  // Add new field
+) {}
+```
+
+3. **Update IncidentExtractor** in `remedy-connector/src/main/java/com/bmc/rag/connector/extractor/`:
+
+```java
+public IncidentRecord extractIncident(Entry entry) {
+    // ... existing extraction
+    String newField = getStringValue(entry, FieldIdConstants.NEW_FIELD_ID);
+
+    return new IncidentRecord(
+        incidentNumber,
+        summary,
+        // ... existing fields
+        newField
+    );
+}
+```
+
+4. **Update chunking strategy** if the field should be vectorized in `vectorization-engine`:
+
+```java
+public List<TextChunk> chunk(IncidentRecord record) {
+    List<TextChunk> chunks = new ArrayList<>();
+    // ... existing chunks
+
+    if (record.newField() != null && !record.newField().isBlank()) {
+        chunks.add(new TextChunk(
+            record.newField(),
+            Map.of(
+                "type", "new_field",
+                "incidentId", record.incidentNumber(),
+                "assigned_group", record.assignedGroup()
+            )
+        ));
+    }
+
+    return chunks;
+}
+```
+
+---
+
+## 14. Database Migrations
+
+### 14.1 Creating Flyway Migrations
+
+Migration files are located in `vector-store/src/main/resources/db/migration/`.
+
+**Naming Convention:**
+```
+V{version}__{description}.sql
+Examples:
+- V1__init_schema.sql
+- V11__add_audit_table.sql
+- V12__create_user_preferences.sql
+```
+
+**Example Migration:**
+```sql
+-- V12__add_feedback_table.sql
+-- Purpose: Track user feedback on AI responses
+
+CREATE TABLE IF NOT EXISTS user_feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id VARCHAR(255) NOT NULL,
+    message_id VARCHAR(255) NOT NULL,
+    rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+    feedback_text TEXT,
+    user_id VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_session FOREIGN KEY (session_id)
+        REFERENCES chat_memory(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_feedback_session ON user_feedback(session_id);
+CREATE INDEX idx_feedback_rating ON user_feedback(rating);
+CREATE INDEX idx_feedback_created ON user_feedback(created_at);
+
+COMMENT ON TABLE user_feedback IS 'Stores user feedback on AI responses for quality improvement';
+```
+
+### 14.2 Migration Commands
+
+```bash
+# Apply migrations
+mvn flyway:migrate -pl vector-store
+
+# Check migration status
+mvn flyway:info -pl vector-store
+
+# Repair migration history (use with caution)
+mvn flyway:repair -pl vector-store
+
+# Validate migrations
+mvn flyway:validate -pl vector-store
+```
+
+### 14.3 pgvector-Specific Migrations
+
+```sql
+-- Creating vector index
+CREATE INDEX ON embedding_store USING hnsw (embedding vector_cosine_ops)
+WITH (m = 24, ef_construction = 200);
+
+-- Adding full-text search
+ALTER TABLE embedding_store
+ADD COLUMN fts_vector tsvector
+GENERATED ALWAYS AS (to_tsvector('english', text_segment)) STORED;
+
+CREATE INDEX idx_embedding_fts ON embedding_store USING gin(fts_vector);
+```
+
+---
+
+## 15. Environment Configuration
+
+### 15.1 Complete Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+# ===========================================
+# DATABASE CONFIGURATION
+# ===========================================
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=rag_agent
+POSTGRES_USER=rag_user
+POSTGRES_PASSWORD=your_secure_password
+
+# Connection pool settings
+DB_POOL_SIZE=20
+DB_MIN_IDLE=5
+DB_CONNECTION_TIMEOUT=30000
+
+# ===========================================
+# BMC REMEDY CONFIGURATION
+# ===========================================
+REMEDY_SERVER=remedy.example.com
+REMEDY_PORT=8080
+REMEDY_USER=api_user
+REMEDY_PASSWORD=your_remedy_password
+REMEDY_AUTH_STRING=
+
+# Connection settings
+REMEDY_SOCKET_TIMEOUT=60000
+REMEDY_MAX_RETRIEVE=500
+
+# ===========================================
+# LLM CONFIGURATION
+# ===========================================
+# Ollama (Local)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3:8b
+OLLAMA_TEMPERATURE=0.0
+
+# Zai API (Cloud)
+ZAI_API_KEY=your_zai_api_key
+ZAI_BASE_URL=https://api.zai.com/v1
+ZAI_MODEL=glm-4.5-flash
+
+# Select provider: ollama | zai
+LLM_PROVIDER=ollama
+
+# ===========================================
+# RAG CONFIGURATION
+# ===========================================
+RAG_MAX_RESULTS=5
+RAG_MIN_SCORE=0.7
+RAG_INCLUDE_CITATIONS=true
+RAG_REBAC_ENABLED=true
+
+# Hybrid search weights
+RAG_SEMANTIC_WEIGHT=0.7
+RAG_KEYWORD_WEIGHT=0.3
+
+# ===========================================
+# AGENTIC OPERATIONS
+# ===========================================
+AGENTIC_ENABLED=true
+AGENTIC_CONFIRMATION_TIMEOUT=300
+AGENTIC_MAX_PENDING_ACTIONS=100
+AGENTIC_RATE_LIMIT_PER_MINUTE=10
+
+# ===========================================
+# APPLICATION SETTINGS
+# ===========================================
+SPRING_PROFILES_ACTIVE=dev
+SERVER_PORT=8080
+LOG_LEVEL=INFO
+
+# Security
+JWT_SECRET=your_jwt_secret_key
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# ===========================================
+# EMBEDDING CONFIGURATION
+# ===========================================
+EMBEDDING_MODEL=all-minilm-l6-v2
+EMBEDDING_DIMENSIONS=384
+EMBEDDING_BATCH_SIZE=32
+```
+
+### 15.2 Profile-Specific Configuration
+
+**Development Profile** (`application-dev.yml`):
+```yaml
+spring:
+  profiles: dev
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.bmc.rag: DEBUG
+    dev.langchain4j: DEBUG
+
+rag:
+  rebac:
+    enabled: false  # Disable for easier testing
+```
+
+**Production Profile** (`application-prod.yml`):
+```yaml
+spring:
+  profiles: prod
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    com.bmc.rag: INFO
+
+rag:
+  rebac:
+    enabled: true
+```
+
+---
+
+## 16. Frontend Development
+
+### 16.1 Setup
+
+```bash
+cd frontend/web-chat
+npm install
+```
+
+### 16.2 Development Commands
+
+```bash
+# Start development server with hot reload
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Lint code
+npm run lint
+
+# Fix lint issues
+npm run lint:fix
+
+# Type check
+npm run typecheck
+```
+
+### 16.3 Component Development
+
+**Creating a new component:**
+
+```tsx
+// src/components/NewComponent.tsx
+import React, { useState, useCallback } from 'react';
+
+interface NewComponentProps {
+    title: string;
+    onAction: (data: string) => void;
+    isLoading?: boolean;
+}
+
+export const NewComponent: React.FC<NewComponentProps> = ({
+    title,
+    onAction,
+    isLoading = false
+}) => {
+    const [inputValue, setInputValue] = useState('');
+
+    const handleSubmit = useCallback(() => {
+        if (inputValue.trim()) {
+            onAction(inputValue);
+            setInputValue('');
+        }
+    }, [inputValue, onAction]);
+
+    return (
+        <div className="p-4 bg-white rounded-lg shadow-md">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                {title}
+            </h2>
+            <div className="flex gap-2">
+                <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md
+                               focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter value..."
+                    disabled={isLoading}
+                />
+                <button
+                    onClick={handleSubmit}
+                    disabled={isLoading || !inputValue.trim()}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md
+                               hover:bg-blue-600 disabled:opacity-50
+                               disabled:cursor-not-allowed transition-colors"
+                >
+                    {isLoading ? 'Loading...' : 'Submit'}
+                </button>
+            </div>
+        </div>
+    );
+};
+```
+
+### 16.4 API Integration
+
+```typescript
+// src/services/api.ts
+const API_BASE = import.meta.env.VITE_API_BASE || '/api/v1';
+
+export const apiClient = {
+    async sendMessage(message: string, sessionId: string) {
+        const response = await fetch(`${API_BASE}/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message, sessionId })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async confirmAction(actionId: string, confirmed: boolean) {
+        const response = await fetch(`${API_BASE}/agentic/confirm/${actionId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ confirmed })
+        });
+
+        return response.json();
+    },
+
+    async getHistory(sessionId: string) {
+        const response = await fetch(`${API_BASE}/chat/history/${sessionId}`);
+        return response.json();
+    }
+};
+```
+
+### 16.5 WebSocket Integration
+
+```typescript
+// src/hooks/useWebSocket.ts
+import { useEffect, useRef, useCallback, useState } from 'react';
+import SockJS from 'sockjs-client';
+import { Client, IMessage } from '@stomp/stompjs';
+
+interface UseWebSocketOptions {
+    sessionId: string;
+    onMessage: (message: any) => void;
+    onError?: (error: Error) => void;
+}
+
+export const useWebSocket = ({ sessionId, onMessage, onError }: UseWebSocketOptions) => {
+    const clientRef = useRef<Client | null>(null);
+    const [connected, setConnected] = useState(false);
+
+    useEffect(() => {
+        const client = new Client({
+            webSocketFactory: () => new SockJS('/ws'),
+            reconnectDelay: 5000,
+            heartbeatIncoming: 4000,
+            heartbeatOutgoing: 4000,
+        });
+
+        client.onConnect = () => {
+            setConnected(true);
+            client.subscribe(`/topic/chat/${sessionId}`, (message: IMessage) => {
+                const data = JSON.parse(message.body);
+                onMessage(data);
+            });
+        };
+
+        client.onDisconnect = () => {
+            setConnected(false);
+        };
+
+        client.onStompError = (frame) => {
+            onError?.(new Error(frame.headers['message']));
+        };
+
+        client.activate();
+        clientRef.current = client;
+
+        return () => {
+            client.deactivate();
+        };
+    }, [sessionId, onMessage, onError]);
+
+    const sendMessage = useCallback((destination: string, body: any) => {
+        if (clientRef.current?.connected) {
+            clientRef.current.publish({
+                destination,
+                body: JSON.stringify(body)
+            });
+        }
+    }, []);
+
+    return { connected, sendMessage };
+};
+```
+
+---
+
+## 17. Agentic Operations Development
+
+### 17.1 Understanding the Confirmation Flow
+
+```
+User Request → Tool Detection → Pending Action Created →
+Confirmation Request Sent → User Confirms/Rejects →
+Action Executed or Cancelled → Response Sent
+```
+
+### 17.2 Adding a New Confirmable Action
+
+1. **Create the action type** in `ConfirmationService`:
+
+```java
+public enum ActionType {
+    CREATE_INCIDENT,
+    UPDATE_INCIDENT,
+    NEW_ACTION_TYPE  // Add your new type
+}
+```
+
+2. **Implement the action handler**:
+
+```java
+@Tool("Description of the new action")
+public String newAction(@P("param") String param) {
+    // Create pending action
+    PendingAction action = PendingAction.builder()
+        .actionId(UUID.randomUUID().toString())
+        .actionType(ActionType.NEW_ACTION_TYPE)
+        .description("Human-readable description of what will happen")
+        .parameters(Map.of("param", param))
+        .createdAt(Instant.now())
+        .build();
+
+    // Store and request confirmation
+    confirmationService.addPendingAction(sessionId, action);
+
+    return String.format(
+        "I need your confirmation to perform this action. " +
+        "Action ID: %s. Please confirm or reject.",
+        action.getActionId()
+    );
+}
+```
+
+3. **Handle the confirmed action**:
+
+```java
+public Object executeAction(PendingAction action) {
+    return switch (action.getActionType()) {
+        case NEW_ACTION_TYPE -> executeNewAction(action.getParameters());
+        // ... other cases
+    };
+}
+
+private Object executeNewAction(Map<String, Object> params) {
+    String param = (String) params.get("param");
+    // Execute the actual action
+    return result;
+}
+```
+
+---
+
+## 18. Security Considerations
+
+### 18.1 Input Validation
+
+```java
+// Always validate input
+@PostMapping("/api/v1/chat")
+public ResponseEntity<?> chat(@Valid @RequestBody ChatRequest request) {
+    // @Valid ensures validation annotations are checked
+}
+
+// In DTO
+public record ChatRequest(
+    @NotBlank @Size(max = 4000) String message,
+    @NotBlank @Pattern(regexp = "^[a-zA-Z0-9-]+$") String sessionId
+) {}
+```
+
+### 18.2 SQL Injection Prevention
+
+```java
+// ALWAYS use parameterized queries
+@Query("SELECT e FROM EmbeddingEntity e WHERE e.metadata->>'incident_id' = :incidentId")
+List<EmbeddingEntity> findByIncidentId(@Param("incidentId") String incidentId);
+
+// NEVER concatenate user input into queries
+// BAD: "SELECT * FROM table WHERE id = '" + userInput + "'"
+```
+
+### 18.3 Secrets Management
+
+```java
+// Use environment variables or secrets management
+@Value("${remedy.password}")
+private String remedyPassword;
+
+// NEVER hardcode secrets
+// BAD: private static final String PASSWORD = "mysecretpassword";
+```
+
+---
+
+## 19. Additional Resources
+
+### 19.1 Documentation Links
+
+- [LangChain4j Documentation](https://docs.langchain4j.dev/)
+- [pgvector Documentation](https://github.com/pgvector/pgvector)
+- [Spring Boot Reference](https://docs.spring.io/spring-boot/docs/current/reference/html/)
+- [BMC AR System API Guide](https://docs.bmc.com/docs/ars/)
+- [Ollama Documentation](https://ollama.ai/docs)
+- [React 19 Documentation](https://react.dev/)
+- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
+
+### 19.2 Internal Documentation
+
+- [README.md](../README.md) - Project overview and quick start
+- [DOCUMENTATION.md](../DOCUMENTATION.md) - Complete technical documentation
+- [API_REFERENCE.md](./API_REFERENCE.md) - API endpoint documentation
+
+### 19.3 Useful Commands Cheat Sheet
+
+```bash
+# Build
+mvn clean install                    # Full build with tests
+mvn clean package -DskipTests        # Quick build
+mvn clean install -pl rag-service -am # Build specific module
+
+# Run
+./start-all.sh                       # Start all services
+./stop-all.sh                        # Stop all services
+mvn spring-boot:run -pl api-gateway  # Run API gateway
+
+# Test
+mvn test                             # Run all tests
+mvn test -pl rag-service             # Test specific module
+mvn test -Dtest=MyTest               # Run specific test
+
+# Database
+mvn flyway:migrate -pl vector-store  # Run migrations
+mvn flyway:info -pl vector-store     # Check migration status
+
+# Docker
+docker-compose up -d                 # Start containers
+docker-compose logs -f postgres      # View logs
+docker-compose down                  # Stop containers
+
+# Git
+git checkout -b feature/my-feature   # Create feature branch
+git push -u origin feature/my-feature # Push branch
+```
+
+---
+
+**Document Version:** 2.0
+**Last Updated:** 2026-01-20

@@ -36,6 +36,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Caffeine Cache -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Apache Tika for attachment parsing -->
         <dependency>
             <groupId>org.apache.tika</groupId>

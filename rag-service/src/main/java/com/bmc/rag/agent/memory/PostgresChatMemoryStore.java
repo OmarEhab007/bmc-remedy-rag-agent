@@ -123,6 +123,49 @@ public class PostgresChatMemoryStore implements ChatMemoryStore {
     }
 
     /**
+     * Get all sessions for a specific user.
+     */
+    public List<String> getSessionsForUser(String userId) {
+        return jdbcTemplate.queryForList(
+            "SELECT session_id FROM chat_memory WHERE user_id = ? GROUP BY session_id ORDER BY MAX(created_at) DESC",
+            String.class,
+            userId
+        );
+    }
+
+    /**
+     * Update the user_id for a session.
+     */
+    public void setSessionUser(String sessionId, String userId) {
+        jdbcTemplate.update(
+            "UPDATE chat_memory SET user_id = ? WHERE session_id = ?",
+            userId,
+            sessionId
+        );
+        log.debug("Set user {} for session {}", userId, sessionId);
+    }
+
+    /**
+     * Add a single message to a session (append mode).
+     */
+    public void addMessage(String sessionId, String userId, ChatMessage message) {
+        String type = getMessageType(message);
+        String content = getMessageContent(message);
+
+        jdbcTemplate.update(
+            "INSERT INTO chat_memory (id, session_id, user_id, message_type, content, created_at) " +
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            UUID.randomUUID(),
+            sessionId,
+            userId,
+            type,
+            content,
+            new Timestamp(System.currentTimeMillis())
+        );
+        log.debug("Added {} message to session {}", type, sessionId);
+    }
+
+    /**
      * Session summary information.
      */
     public record SessionInfo(String sessionId, String title, int messageCount, long lastUpdated) {}

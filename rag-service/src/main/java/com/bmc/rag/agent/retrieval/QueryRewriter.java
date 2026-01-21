@@ -1,6 +1,9 @@
 package com.bmc.rag.agent.retrieval;
 
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -220,7 +223,11 @@ public class QueryRewriter {
                 Only output the rewritten query, nothing else.
                 """, original, expanded);
 
-            String llmResult = chatModel.generate(prompt);
+            ChatRequest chatRequest = ChatRequest.builder()
+                .messages(List.of(UserMessage.from(prompt)))
+                .build();
+            ChatResponse response = chatModel.chat(chatRequest);
+            String llmResult = response.aiMessage().text();
             modifications.add("LLM enhanced query");
             return llmResult.trim();
 

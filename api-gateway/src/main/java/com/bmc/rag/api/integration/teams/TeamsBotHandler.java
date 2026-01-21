@@ -69,7 +69,7 @@ public class TeamsBotHandler {
 
         // Process with RAG service
         String sessionId = "teams-" + conversationId;
-        RagAssistantService.ChatResponse response = ragAssistantService.chat(sessionId, text, userContext);
+        RagAssistantService.ChatResponseDto response = ragAssistantService.chat(sessionId, text, userContext);
 
         // Build response
         if (config.isIncludeCitations() && !response.getSources().isEmpty()) {
@@ -116,7 +116,7 @@ public class TeamsBotHandler {
     /**
      * Build an Adaptive Card response with citations.
      */
-    private JsonNode buildAdaptiveCardResponse(JsonNode activity, RagAssistantService.ChatResponse chatResponse) {
+    private JsonNode buildAdaptiveCardResponse(JsonNode activity, RagAssistantService.ChatResponseDto chatResponse) {
         ObjectNode response = objectMapper.createObjectNode();
         response.put("type", "message");
         response.set("conversation", activity.path("conversation").deepCopy());

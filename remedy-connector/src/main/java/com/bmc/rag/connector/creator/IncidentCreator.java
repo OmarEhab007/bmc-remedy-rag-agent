@@ -104,6 +104,12 @@ public class IncidentCreator {
         if (request.getServiceType() != null) {
             entry.put(IncidentCreate.SERVICE_TYPE, new Value(request.getServiceType()));
         }
+        if (request.getConfigurationItem() != null) {
+            entry.put(IncidentCreate.CI_NAME, new Value(request.getConfigurationItem()));
+        }
+        if (request.getLocation() != null) {
+            entry.put(IncidentCreate.LOCATION, new Value(request.getLocation()));
+        }
 
         return entry;
     }

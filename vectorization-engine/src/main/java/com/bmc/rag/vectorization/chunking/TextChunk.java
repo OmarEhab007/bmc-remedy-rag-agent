@@ -26,7 +26,10 @@ public class TextChunk {
         IMPLEMENTATION,    // Change implementation plan
         ROLLBACK,          // Change rollback plan
         ARTICLE_CONTENT,   // Knowledge article content
-        ATTACHMENT         // Extracted attachment text
+        ATTACHMENT,        // Extracted attachment text
+        DAMEE_SERVICE,     // Damee service catalog entry
+        DAMEE_WORKFLOW,    // Damee service workflow
+        DAMEE_KEYWORDS     // Damee service keywords for intent matching
     }
 
     /**

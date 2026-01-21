@@ -9,6 +9,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.Buffer;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -22,6 +23,7 @@ import java.io.IOException;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "zai.enabled", havingValue = "true", matchIfMissing = false)
 public class ZaiRequestInterceptor implements Interceptor {
 
     private final ZaiConfig zaiConfig;
@@ -36,9 +38,8 @@ public class ZaiRequestInterceptor implements Interceptor {
     public Response intercept(Chain chain) throws IOException {
         Request request = chain.request();
 
-        // Only modify chat completion requests when thinking is enabled
-        if (!zaiConfig.isThinkingEnabled() ||
-            !request.url().encodedPath().contains("/chat/completions")) {
+        // Only modify chat completion requests
+        if (!request.url().encodedPath().contains("/chat/completions")) {
             return chain.proceed(request);
         }
 
@@ -55,13 +56,19 @@ public class ZaiRequestInterceptor implements Interceptor {
 
             ObjectNode node = (ObjectNode) mapper.readTree(json);
 
-            // Add thinking configuration
+            // Add thinking configuration - disable if not enabled to prevent reasoning_content
             ObjectNode thinking = mapper.createObjectNode();
-            thinking.put("type", zaiConfig.getThinkingType());
+            if (zaiConfig.isThinkingEnabled()) {
+                thinking.put("type", zaiConfig.getThinkingType());
+                log.debug("Added thinking mode to Z.AI request: type={}", zaiConfig.getThinkingType());
+            } else {
+                // Explicitly disable thinking to prevent reasoning_content in streaming
+                thinking.put("type", "disabled");
+                log.debug("Disabled thinking mode in Z.AI request to prevent reasoning_content");
+            }
             node.set("thinking", thinking);
 
             String modifiedJson = mapper.writeValueAsString(node);
-            log.debug("Added thinking mode to Z.AI request: type={}", zaiConfig.getThinkingType());
 
             RequestBody newBody = RequestBody.create(
                 modifiedJson,
@@ -74,7 +81,7 @@ public class ZaiRequestInterceptor implements Interceptor {
                 .build();
 
         } catch (Exception e) {
-            log.warn("Failed to add thinking mode to request: {}", e.getMessage());
+            log.warn("Failed to modify thinking mode in request: {}", e.getMessage());
             // Fall back to original request if modification fails
             return chain.proceed(request);
         }

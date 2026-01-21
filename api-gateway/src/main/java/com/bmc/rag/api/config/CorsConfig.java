@@ -34,7 +34,7 @@ public class CorsConfig implements WebMvcConfigurer {
         configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         // Restrict allowed headers to specific values
-        configuration.setAllowedHeaders(List.of("Content-Type", "Authorization", "X-Requested-With", "Accept"));
+        configuration.setAllowedHeaders(List.of("Content-Type", "Authorization", "X-Requested-With", "Accept", "X-Session-ID"));
         configuration.setExposedHeaders(List.of("X-Total-Count", "X-Page-Number"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(600L); // 10 minutes
@@ -42,6 +42,7 @@ public class CorsConfig implements WebMvcConfigurer {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
         source.registerCorsConfiguration("/ws/**", configuration);
+        source.registerCorsConfiguration("/v1/**", configuration);  // OpenAI-compatible API
         return source;
     }
 
@@ -64,13 +65,14 @@ public class CorsConfig implements WebMvcConfigurer {
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         // Strict header whitelist
-        configuration.setAllowedHeaders(List.of("Content-Type", "Authorization"));
+        configuration.setAllowedHeaders(List.of("Content-Type", "Authorization", "X-Session-ID"));
         configuration.setExposedHeaders(List.of("X-Total-Count", "X-Page-Number"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(600L); // 10 minutes
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/v1/**", configuration);  // OpenAI-compatible API
         return source;
     }
 
@@ -81,7 +83,15 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
             .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-            .allowedHeaders("Content-Type", "Authorization", "X-Requested-With", "Accept")
+            .allowedHeaders("Content-Type", "Authorization", "X-Requested-With", "Accept", "X-Session-ID")
+            .allowCredentials(true)
+            .maxAge(600);
+
+        // OpenAI-compatible API for Open WebUI
+        registry.addMapping("/v1/**")
+            .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
+            .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+            .allowedHeaders("Content-Type", "Authorization", "X-Requested-With", "Accept", "X-Session-ID")
             .allowCredentials(true)
             .maxAge(600);
     }

@@ -125,3 +125,23 @@ ticket-create.zip
 .specify/
 docs/
 ticket-create/
+
+frontend/open-webui-main
+frontend/open-webui-0.7.2
+
+Damee.md
+DATA_INTEGRITY_ACTION_PLAN.md
+INTEGRITY_CHECK_README.md
+BMC Remedy RAG Agent Design.txt
+app.log
+QUICK_REFERENCE.md
+Section_12_Agentic_Operations.txt
+start-all.sh
+stop-all.sh
+start-dev.sh
+VECTOR_STORE_INTEGRITY_REPORT.md
+vector_store_remediation.sql
+.claude
+claude.md
+.gitignore
+.cursorrules

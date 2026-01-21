@@ -54,6 +54,11 @@ public class CreationResult {
     private String errorCode;
 
     /**
+     * Custom message for user display.
+     */
+    private String message;
+
+    /**
      * Create a successful result.
      */
     public static CreationResult success(String entryId, String recordId, String formName) {
@@ -87,10 +92,21 @@ public class CreationResult {
      * Get a user-friendly message about the result.
      */
     public String toUserMessage() {
+        if (message != null) {
+            return message;
+        }
         if (success) {
             return String.format("Successfully created %s", recordId);
         } else {
             return String.format("Failed to create record: %s", errorMessage);
         }
+    }
+
+    /**
+     * Return a new result with a custom message.
+     */
+    public CreationResult withMessage(String message) {
+        this.message = message;
+        return this;
     }
 }

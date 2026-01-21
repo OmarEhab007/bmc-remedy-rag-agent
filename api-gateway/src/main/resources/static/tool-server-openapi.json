@@ -1,0 +1,857 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "BMC Remedy RAG Tool Server API",
+    "description": "REST API for Open WebUI tool integration with BMC Remedy. Provides incident search, creation, knowledge base access, and agentic workflow capabilities.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "BMC Remedy RAG Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://host.docker.internal:8080",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/tool-server/incidents/search": {
+      "post": {
+        "operationId": "searchIncidents",
+        "summary": "Search for incidents",
+        "description": "Semantic search across BMC Remedy incidents. Use this to find similar existing incidents before creating new ones, or to look up related issues.",
+        "tags": ["Incidents"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              },
+              "example": {
+                "query": "VPN connection timeout",
+                "limit": 5,
+                "minScore": 0.3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/tool-server/incidents/{incidentId}": {
+      "get": {
+        "operationId": "getIncidentDetails",
+        "summary": "Get incident details",
+        "description": "Retrieve full details of a specific incident including description, status, work logs, and resolution.",
+        "tags": ["Incidents"],
+        "parameters": [
+          {
+            "name": "incidentId",
+            "in": "path",
+            "required": true,
+            "description": "Incident number (e.g., INC000000001)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Incident details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Incident not found"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateIncident",
+        "summary": "Update an incident",
+        "description": "Update an existing incident's status, add work log notes, or modify other fields. Requires confirmation by default.",
+        "tags": ["Incidents"],
+        "parameters": [
+          {
+            "name": "incidentId",
+            "in": "path",
+            "required": true,
+            "description": "Incident number to update",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIncidentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Update response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateIncidentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Incident not found"
+          }
+        }
+      }
+    },
+    "/tool-server/incidents": {
+      "post": {
+        "operationId": "createIncident",
+        "summary": "Create a new incident",
+        "description": "Create a new incident in BMC Remedy. By default, the creation is staged and requires user confirmation. Returns similar incidents if duplicates are detected.",
+        "tags": ["Incidents"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIncidentRequest"
+              },
+              "example": {
+                "summary": "VPN connection fails with timeout error",
+                "description": "User reports that VPN client shows connection timeout when attempting to connect from home network. Error code: TIMEOUT_001. Has been occurring since yesterday morning.",
+                "impact": 3,
+                "urgency": 2
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Creation response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateIncidentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/tool-server/knowledge/search": {
+      "post": {
+        "operationId": "searchKnowledge",
+        "summary": "Search knowledge base",
+        "description": "Semantic search across BMC Remedy knowledge articles. Find solutions, how-to guides, and troubleshooting documentation.",
+        "tags": ["Knowledge"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              },
+              "example": {
+                "query": "how to reset VPN password",
+                "limit": 5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tool-server/knowledge/{articleId}": {
+      "get": {
+        "operationId": "getKnowledgeArticle",
+        "summary": "Get knowledge article",
+        "description": "Retrieve full content of a specific knowledge article including all sections and attachments.",
+        "tags": ["Knowledge"],
+        "parameters": [
+          {
+            "name": "articleId",
+            "in": "path",
+            "required": true,
+            "description": "Knowledge article ID (e.g., KB000000001)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Article details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Article not found"
+          }
+        }
+      }
+    },
+    "/tool-server/workorders/search": {
+      "post": {
+        "operationId": "searchWorkOrders",
+        "summary": "Search work orders",
+        "description": "Semantic search across BMC Remedy work orders.",
+        "tags": ["Work Orders"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tool-server/actions/confirm": {
+      "post": {
+        "operationId": "confirmAction",
+        "summary": "Confirm a staged action",
+        "description": "Confirm a previously staged action (e.g., incident creation) to execute it.",
+        "tags": ["Actions"],
+        "parameters": [
+          {
+            "name": "actionId",
+            "in": "query",
+            "required": true,
+            "description": "The action ID returned from staging",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": true,
+            "description": "Session ID for ownership verification",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Confirmation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmActionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tool-server/actions/cancel": {
+      "post": {
+        "operationId": "cancelAction",
+        "summary": "Cancel a staged action",
+        "description": "Cancel a previously staged action without executing it.",
+        "tags": ["Actions"],
+        "parameters": [
+          {
+            "name": "actionId",
+            "in": "query",
+            "required": true,
+            "description": "The action ID to cancel",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": true,
+            "description": "Session ID for ownership verification",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancellation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmActionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tool-server/actions/pending": {
+      "get": {
+        "operationId": "getPendingActions",
+        "summary": "List pending actions",
+        "description": "Get all pending actions for the current session that are awaiting confirmation.",
+        "tags": ["Actions"],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": true,
+            "description": "Session ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of pending actions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PendingAction"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SearchRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query text for semantic matching",
+            "maxLength": 2000
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 50
+          },
+          "minScore": {
+            "type": "number",
+            "description": "Minimum similarity score (0.0 to 1.0)",
+            "default": 0.3,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "filters": {
+            "type": "object",
+            "description": "Optional filters (status, assignedGroup, category)",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Original search query"
+          },
+          "totalResults": {
+            "type": "integer",
+            "description": "Total number of results found"
+          },
+          "returnedResults": {
+            "type": "integer",
+            "description": "Number of results in this response"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            }
+          },
+          "message": {
+            "type": "string",
+            "description": "Optional message about the search"
+          },
+          "hasPotentialDuplicates": {
+            "type": "boolean",
+            "description": "Whether high-similarity duplicates were found"
+          },
+          "executionTimeMs": {
+            "type": "integer",
+            "description": "Search execution time in milliseconds"
+          }
+        }
+      },
+      "SearchResultItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Record ID (e.g., INC000001)"
+          },
+          "type": {
+            "type": "string",
+            "description": "Record type (Incident, KnowledgeArticle, WorkOrder)"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title or summary"
+          },
+          "snippet": {
+            "type": "string",
+            "description": "Matched content snippet"
+          },
+          "score": {
+            "type": "number",
+            "description": "Similarity score (0.0 to 1.0)"
+          },
+          "scorePercent": {
+            "type": "integer",
+            "description": "Similarity as percentage"
+          },
+          "status": {
+            "type": "string",
+            "description": "Record status"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "IncidentDetail": {
+        "type": "object",
+        "properties": {
+          "incidentNumber": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "integer"
+          },
+          "impactLabel": {
+            "type": "string"
+          },
+          "urgency": {
+            "type": "integer"
+          },
+          "urgencyLabel": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "priorityLabel": {
+            "type": "string"
+          },
+          "assignedGroup": {
+            "type": "string"
+          },
+          "assignedTo": {
+            "type": "string"
+          },
+          "submitter": {
+            "type": "string"
+          },
+          "categoryPath": {
+            "type": "string"
+          },
+          "createDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastModifiedDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workLogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkLogItem"
+            }
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "errorMessage": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkLogItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "submitter": {
+            "type": "string"
+          },
+          "submitDate": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateIncidentRequest": {
+        "type": "object",
+        "required": ["summary", "description", "impact", "urgency"],
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "Brief summary (max 255 chars)",
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed description",
+            "maxLength": 32000
+          },
+          "impact": {
+            "type": "integer",
+            "description": "1=Extensive, 2=Significant, 3=Moderate, 4=Minor",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "urgency": {
+            "type": "integer",
+            "description": "1=Critical, 2=High, 3=Medium, 4=Low",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "requesterFirstName": {
+            "type": "string"
+          },
+          "requesterLastName": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "subCategory": {
+            "type": "string"
+          },
+          "assignedGroup": {
+            "type": "string"
+          },
+          "skipDuplicateCheck": {
+            "type": "boolean",
+            "default": false
+          },
+          "requireConfirmation": {
+            "type": "boolean",
+            "default": true
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateIncidentResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "description": "STAGED, CREATED, FAILED, DUPLICATE_WARNING, RATE_LIMITED"
+          },
+          "message": {
+            "type": "string"
+          },
+          "incidentNumber": {
+            "type": "string",
+            "description": "Created incident number (if status=CREATED)"
+          },
+          "actionId": {
+            "type": "string",
+            "description": "Staged action ID (if status=STAGED)"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "similarIncidents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            }
+          },
+          "hasDuplicates": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateIncidentRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "New status (New, Assigned, In Progress, Pending, Resolved, Closed)"
+          },
+          "statusReason": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "workLogNotes": {
+            "type": "string",
+            "description": "Work log notes to add"
+          },
+          "workLogType": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "urgency": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "assignedGroup": {
+            "type": "string"
+          },
+          "assignedTo": {
+            "type": "string"
+          },
+          "requireConfirmation": {
+            "type": "boolean",
+            "default": true
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateIncidentResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "incidentNumber": {
+            "type": "string"
+          },
+          "actionId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "preview": {
+            "type": "string"
+          }
+        }
+      },
+      "KnowledgeDetail": {
+        "type": "object",
+        "properties": {
+          "articleId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "articleType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "categoryPath": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "viewCount": {
+            "type": "integer"
+          },
+          "publishedDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "errorMessage": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfirmActionResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "description": "EXECUTED, CANCELLED, FAILED, EXPIRED, NOT_FOUND"
+          },
+          "message": {
+            "type": "string"
+          },
+          "actionId": {
+            "type": "string"
+          },
+          "recordId": {
+            "type": "string",
+            "description": "Created record ID (if executed)"
+          },
+          "recordType": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingAction": {
+        "type": "object",
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "actionType": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "stagedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,9 +1,12 @@
 package com.bmc.rag.agent.service;
 
 import com.bmc.rag.agent.config.AgenticConfig;
+import com.bmc.rag.agent.config.GoogleAiConfig;
 import com.bmc.rag.agent.config.RagConfig;
 import com.bmc.rag.agent.config.ZaiConfig;
+import java.util.concurrent.Semaphore;
 import com.bmc.rag.agent.memory.PostgresChatMemoryStore;
+import com.bmc.rag.agent.metrics.RagMetricsService;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever.RetrievalResult;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever.UserContext;
@@ -15,10 +18,11 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
-import dev.langchain4j.model.output.Response;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -41,8 +45,14 @@ public class RagAssistantService {
     private final SecureContentRetriever contentRetriever;
     private final PostgresChatMemoryStore chatMemoryStore;
     private final RagConfig ragConfig;
-    private final ZaiConfig zaiConfig;
     private final AgenticConfig agenticConfig;
+    private final RagMetricsService metricsService;
+
+    // LLM rate limiting semaphore (from either ZaiConfig or GoogleAiConfig)
+    private final Semaphore llmSemaphore;
+
+    // Whether thinking mode is enabled (only for Z.AI)
+    private final boolean thinkingEnabled;
 
     // Optional agentic assistant (injected when agentic.enabled=true)
     private AgenticAssistantService agenticAssistantService;
@@ -50,8 +60,8 @@ public class RagAssistantService {
     // Session-specific chat memories with eviction policy to prevent OOM
     private final Cache<String, ChatMemory> sessionMemories;
 
-    // Streaming timeout in seconds
-    private static final int STREAMING_TIMEOUT_SECONDS = 120;
+    // Streaming timeout in seconds (reduced from 120s for faster failure detection)
+    private static final int STREAMING_TIMEOUT_SECONDS = 60;
 
     // Maximum response size to prevent OOM from unbounded streaming
     private static final int MAX_RESPONSE_SIZE = 50_000;
@@ -66,15 +76,32 @@ public class RagAssistantService {
             SecureContentRetriever contentRetriever,
             PostgresChatMemoryStore chatMemoryStore,
             RagConfig ragConfig,
-            ZaiConfig zaiConfig,
-            AgenticConfig agenticConfig) {
+            @org.springframework.beans.factory.annotation.Autowired(required = false) ZaiConfig zaiConfig,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) GoogleAiConfig googleAiConfig,
+            AgenticConfig agenticConfig,
+            RagMetricsService metricsService) {
         this.chatModel = chatModel;
         this.streamingChatModel = streamingChatModel;
         this.contentRetriever = contentRetriever;
         this.chatMemoryStore = chatMemoryStore;
         this.ragConfig = ragConfig;
-        this.zaiConfig = zaiConfig;
         this.agenticConfig = agenticConfig;
+
+        // Use semaphore from whichever config is active
+        if (zaiConfig != null && zaiConfig.getRequestSemaphore() != null) {
+            this.llmSemaphore = zaiConfig.getRequestSemaphore();
+            this.thinkingEnabled = zaiConfig.isThinkingEnabled();
+            log.info("Using Z.AI rate limiter");
+        } else if (googleAiConfig != null && googleAiConfig.getRequestSemaphore() != null) {
+            this.llmSemaphore = googleAiConfig.getRequestSemaphore();
+            this.thinkingEnabled = false;
+            log.info("Using Google AI rate limiter");
+        } else {
+            this.llmSemaphore = null;
+            this.thinkingEnabled = false;
+            log.warn("No LLM rate limiter configured");
+        }
+        this.metricsService = metricsService;
 
         // Initialize Caffeine cache with eviction policy
         // Session timeout is 30 minutes per security spec (P1.4)
@@ -117,13 +144,13 @@ public class RagAssistantService {
      * @param userContext User context for access control
      * @return The assistant's response
      */
-    public ChatResponse chatWithAgenticSupport(String sessionId, String question, String userId, UserContext userContext) {
+    public ChatResponseDto chatWithAgenticSupport(String sessionId, String question, String userId, UserContext userContext) {
         // Check for agentic intent
         if (hasAgenticIntent(question)) {
             log.info("Agentic intent detected, delegating to AgenticAssistantService");
             var agenticResponse = agenticAssistantService.processMessage(sessionId, userId, question, userContext);
 
-            return ChatResponse.builder()
+            return ChatResponseDto.builder()
                 .sessionId(sessionId)
                 .response(agenticResponse.getResponse())
                 .sources(Collections.emptyList())
@@ -143,39 +170,91 @@ public class RagAssistantService {
      * @param userContext User context for access control
      * @return The assistant's response
      */
-    public ChatResponse chat(String sessionId, String question, UserContext userContext) {
+    public ChatResponseDto chat(String sessionId, String question, UserContext userContext) {
         log.info("Processing chat request for session {}: '{}'",
             sessionId, truncateForLog(question));
+
+        long totalStartTime = System.currentTimeMillis();
 
         // Get or create chat memory for this session
         ChatMemory memory = getOrCreateMemory(sessionId);
 
-        // Retrieve relevant content
+        // Retrieve relevant content with metrics
+        long retrievalStartTime = System.currentTimeMillis();
         RetrievalResult retrievalResult = contentRetriever.retrieve(question, userContext);
+        long retrievalTime = System.currentTimeMillis() - retrievalStartTime;
+
+        // Record retrieval metrics
+        metricsService.recordRetrievalLatency(retrievalTime);
+        metricsService.recordRetrieval(retrievalResult.size());
 
         // Build messages for LLM
         List<ChatMessage> messages = buildMessages(memory, question, retrievalResult);
 
-        // Call the LLM
+        // Call the LLM with metrics (use semaphore to prevent Z.AI rate limiting)
+        long generationStartTime = System.currentTimeMillis();
         String response;
+        boolean semaphoreAcquired = false;
         try {
-            Response<AiMessage> llmResponse = chatModel.generate(messages);
-            response = llmResponse.content().text();
-            log.debug("LLM response generated: {} chars", response.length());
+            // Acquire semaphore to limit concurrent LLM requests
+            if (llmSemaphore != null) {
+                semaphoreAcquired = llmSemaphore.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS);
+                if (!semaphoreAcquired) {
+                    log.warn("Timeout waiting for LLM request slot");
+                    throw new RuntimeException("Service busy - please try again");
+                }
+                log.debug("Acquired LLM request slot for non-streaming (available: {})", llmSemaphore.availablePermits());
+            }
+
+            ChatRequest chatRequest = ChatRequest.builder()
+                .messages(messages)
+                .build();
+            ChatResponse llmResponse = chatModel.chat(chatRequest);
+            response = llmResponse.aiMessage().text();
+            long generationTime = System.currentTimeMillis() - generationStartTime;
+            metricsService.recordGenerationLatency(generationTime);
+            log.debug("LLM response generated: {} chars in {}ms", response.length(), generationTime);
+
+            // Record citations
+            int citationCount = retrievalResult.getSourceReferences().size();
+            if (citationCount > 0) {
+                metricsService.recordCitations(citationCount);
+            }
+
+            // Record groundedness score based on context availability
+            if (!retrievalResult.isEmpty()) {
+                double groundedness = Math.min(1.0, citationCount / 5.0); // Simple heuristic
+                metricsService.recordGroundednessScore(groundedness);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted waiting for Z.AI slot: {}", e.getMessage());
+            response = "Service temporarily unavailable. Please try again.";
         } catch (Exception e) {
             log.error("LLM call failed: {}", e.getMessage(), e);
+            metricsService.recordError("llm_generation");
             // Provide bilingual error message based on query language
             response = isArabicQuery(question)
                 ? "عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى أو إعادة صياغة سؤالك."
                 : "I apologize, but I encountered an error while processing your request. Please try again or rephrase your question.";
+        } finally {
+            // Always release semaphore
+            if (semaphoreAcquired && llmSemaphore != null) {
+                llmSemaphore.release();
+                log.debug("Released LLM request slot for non-streaming");
+            }
         }
+
+        // Record total latency
+        long totalTime = System.currentTimeMillis() - totalStartTime;
+        metricsService.recordTotalLatency(totalTime);
 
         // Update memory with the conversation
         memory.add(UserMessage.from(question));
         memory.add(AiMessage.from(response));
 
         // Build and return response
-        return ChatResponse.builder()
+        return ChatResponseDto.builder()
             .sessionId(sessionId)
             .response(response)
             .sources(retrievalResult.getSourceReferences())
@@ -186,7 +265,7 @@ public class RagAssistantService {
     /**
      * Chat without context (direct LLM query).
      */
-    public ChatResponse chatWithoutContext(String sessionId, String question) {
+    public ChatResponseDto chatWithoutContext(String sessionId, String question) {
         log.info("Processing direct chat for session {}", sessionId);
 
         ChatMemory memory = getOrCreateMemory(sessionId);
@@ -197,18 +276,38 @@ public class RagAssistantService {
         messages.add(UserMessage.from(question));
 
         String response;
+        boolean semaphoreAcquired = false;
         try {
-            Response<AiMessage> llmResponse = chatModel.generate(messages);
-            response = llmResponse.content().text();
+            // Acquire semaphore to limit concurrent LLM requests
+            if (llmSemaphore != null) {
+                semaphoreAcquired = llmSemaphore.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS);
+                if (!semaphoreAcquired) {
+                    log.warn("Timeout waiting for LLM request slot");
+                    throw new RuntimeException("Service busy - please try again");
+                }
+            }
+
+            ChatRequest chatRequest = ChatRequest.builder()
+                .messages(messages)
+                .build();
+            ChatResponse llmResponse = chatModel.chat(chatRequest);
+            response = llmResponse.aiMessage().text();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            response = "Service temporarily unavailable. Please try again.";
         } catch (Exception e) {
             log.error("LLM call failed: {}", e.getMessage(), e);
             response = "I encountered an error processing your request.";
+        } finally {
+            if (semaphoreAcquired && llmSemaphore != null) {
+                llmSemaphore.release();
+            }
         }
 
         memory.add(UserMessage.from(question));
         memory.add(AiMessage.from(response));
 
-        return ChatResponse.builder()
+        return ChatResponseDto.builder()
             .sessionId(sessionId)
             .response(response)
             .sources(Collections.emptyList())
@@ -259,79 +358,89 @@ public class RagAssistantService {
         CountDownLatch latch = new CountDownLatch(1);
         List<SecureContentRetriever.RetrievedDocument> citationDocuments = retrievalResult.getDocumentsForCitations();
 
-        streamingChatModel.generate(messages, new StreamingResponseHandler<AiMessage>() {
-            private volatile boolean truncated = false;
-            private volatile boolean inThinkingBlock = false;
+        ChatRequest chatRequest = ChatRequest.builder()
+            .messages(messages)
+            .build();
+
+        streamingChatModel.chat(chatRequest, new StreamingChatResponseHandler() {
+            // Use atomic flags for lock-free thread safety
+            private final java.util.concurrent.atomic.AtomicBoolean truncated = new java.util.concurrent.atomic.AtomicBoolean(false);
+            private final java.util.concurrent.atomic.AtomicBoolean inThinkingBlock = new java.util.concurrent.atomic.AtomicBoolean(false);
             private final StringBuilder thinkingContent = new StringBuilder();
-            private final Object tokenLock = new Object();  // Synchronization lock for token ordering
 
             @Override
-            public void onNext(String token) {
-                // Synchronize to ensure tokens are processed and sent in order
-                // LangChain4j may invoke onNext() from multiple threads concurrently
-                synchronized (tokenLock) {
-                    // Check response size to prevent OOM from unbounded streaming
-                    if (truncated) {
-                        return;  // Stop processing tokens after truncation
-                    }
+            public void onPartialResponse(String token) {
+                // Fast path: check truncation flag without locking
+                if (truncated.get()) {
+                    return;  // Stop processing tokens after truncation
+                }
 
-                    // Handle thinking mode tokens (GLM-4.7 format)
-                    if (zaiConfig.isThinkingEnabled()) {
-                        // Check for thinking block markers
-                        if (token.contains(THINKING_START)) {
-                            inThinkingBlock = true;
+                // Handle thinking mode tokens (GLM-4.7 format)
+                if (thinkingEnabled) {
+                    // Check for thinking block markers
+                    if (token.contains(THINKING_START)) {
+                        inThinkingBlock.set(true);
+                        synchronized (thinkingContent) {
                             thinkingContent.setLength(0);  // Reset thinking buffer
-                            log.debug("Entering thinking block for session {}", sessionId);
-                            // Extract any content after the start tag
-                            int startIdx = token.indexOf(THINKING_START) + THINKING_START.length();
-                            if (startIdx < token.length()) {
+                        }
+                        log.debug("Entering thinking block for session {}", sessionId);
+                        // Extract any content after the start tag
+                        int startIdx = token.indexOf(THINKING_START) + THINKING_START.length();
+                        if (startIdx < token.length()) {
+                            synchronized (thinkingContent) {
                                 thinkingContent.append(token.substring(startIdx));
                             }
-                            return;  // Don't send thinking start marker to client
                         }
+                        return;  // Don't send thinking start marker to client
+                    }
 
-                        if (inThinkingBlock) {
-                            if (token.contains(THINKING_END)) {
-                                // Extract content before the end tag
-                                int endIdx = token.indexOf(THINKING_END);
+                    if (inThinkingBlock.get()) {
+                        if (token.contains(THINKING_END)) {
+                            // Extract content before the end tag
+                            int endIdx = token.indexOf(THINKING_END);
+                            synchronized (thinkingContent) {
                                 if (endIdx > 0) {
                                     thinkingContent.append(token.substring(0, endIdx));
                                 }
                                 log.debug("Exiting thinking block for session {} ({} chars of reasoning)",
                                     sessionId, thinkingContent.length());
-                                inThinkingBlock = false;
-                                // Process any content after the end tag
-                                int afterIdx = endIdx + THINKING_END.length();
-                                if (afterIdx < token.length()) {
-                                    String afterThinking = token.substring(afterIdx);
-                                    if (!afterThinking.isEmpty()) {
-                                        fullResponse.append(afterThinking);
-                                        tokenConsumer.accept(afterThinking);
-                                    }
-                                }
-                                return;
                             }
-                            // Accumulate thinking content but don't send to client
-                            thinkingContent.append(token);
+                            inThinkingBlock.set(false);
+                            // Process any content after the end tag
+                            int afterIdx = endIdx + THINKING_END.length();
+                            if (afterIdx < token.length()) {
+                                String afterThinking = token.substring(afterIdx);
+                                if (!afterThinking.isEmpty()) {
+                                    fullResponse.append(afterThinking);
+                                    tokenConsumer.accept(afterThinking);
+                                }
+                            }
                             return;
                         }
-                    }
-
-                    // Normal token processing
-                    if (fullResponse.length() + token.length() > MAX_RESPONSE_SIZE) {
-                        log.warn("Response exceeded max size ({} chars), truncating for session {}",
-                            MAX_RESPONSE_SIZE, sessionId);
-                        truncated = true;
-                        tokenConsumer.accept("\n\n[Response truncated due to length]");
+                        // Accumulate thinking content but don't send to client
+                        synchronized (thinkingContent) {
+                            thinkingContent.append(token);
+                        }
                         return;
                     }
-                    fullResponse.append(token);
-                    tokenConsumer.accept(token);
                 }
+
+                // Normal token processing - check and set truncation atomically
+                int newLength = fullResponse.length() + token.length();
+                if (newLength > MAX_RESPONSE_SIZE) {
+                    if (truncated.compareAndSet(false, true)) {
+                        log.warn("Response exceeded max size ({} chars), truncating for session {}",
+                            MAX_RESPONSE_SIZE, sessionId);
+                        tokenConsumer.accept("\n\n[Response truncated due to length]");
+                    }
+                    return;
+                }
+                fullResponse.append(token);
+                tokenConsumer.accept(token);
             }
 
             @Override
-            public void onComplete(Response<AiMessage> response) {
+            public void onCompleteResponse(ChatResponse response) {
                 try {
                     // Update memory with the conversation
                     String responseText = fullResponse.toString();
@@ -478,6 +587,15 @@ public class RagAssistantService {
      * Get or create chat memory for a session.
      */
     private ChatMemory getOrCreateMemory(String sessionId) {
+        // Check if memory exists (cache hit) or needs to be created (cache miss)
+        ChatMemory existingMemory = sessionMemories.getIfPresent(sessionId);
+        if (existingMemory != null) {
+            metricsService.recordCacheHit();
+            return existingMemory;
+        }
+
+        // Cache miss - create new memory
+        metricsService.recordCacheMiss();
         return sessionMemories.get(sessionId, id -> {
             ChatMemory memory = MessageWindowChatMemory.builder()
                 .id(id)
@@ -544,7 +662,7 @@ public class RagAssistantService {
      */
     @lombok.Data
     @lombok.Builder
-    public static class ChatResponse {
+    public static class ChatResponseDto {
         private String sessionId;
         private String response;
         private List<String> sources;

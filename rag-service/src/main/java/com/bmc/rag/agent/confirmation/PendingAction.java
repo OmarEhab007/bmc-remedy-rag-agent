@@ -226,4 +226,42 @@ public class PendingAction {
             .expiresAt(expiresAt)
             .build();
     }
+
+    /**
+     * Create a pending action for incident update.
+     */
+    public static PendingAction forIncidentUpdate(
+            String sessionId,
+            String userId,
+            Object payload,
+            String preview,
+            Instant expiresAt) {
+        return PendingAction.builder()
+            .sessionId(sessionId)
+            .userId(userId)
+            .actionType(ActionType.INCIDENT_UPDATE)
+            .payload(payload)
+            .preview(preview)
+            .expiresAt(expiresAt)
+            .build();
+    }
+
+    /**
+     * Create a pending action for work order update.
+     */
+    public static PendingAction forWorkOrderUpdate(
+            String sessionId,
+            String userId,
+            Object payload,
+            String preview,
+            Instant expiresAt) {
+        return PendingAction.builder()
+            .sessionId(sessionId)
+            .userId(userId)
+            .actionType(ActionType.WORK_ORDER_UPDATE)
+            .payload(payload)
+            .preview(preview)
+            .expiresAt(expiresAt)
+            .build();
+    }
 }

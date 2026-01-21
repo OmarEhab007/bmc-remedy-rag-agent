@@ -1,9 +1,12 @@
 package com.bmc.rag.agent.config;
 
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -17,6 +20,7 @@ import org.springframework.context.annotation.Primary;
 
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -30,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Configuration
 @ConfigurationProperties(prefix = "zai")
+@ConditionalOnProperty(name = "zai.enabled", havingValue = "true", matchIfMissing = false)
 public class ZaiConfig {
 
     @Autowired(required = false)
@@ -78,6 +83,16 @@ public class ZaiConfig {
     private double frequencyPenalty = 0.0;
 
     /**
+     * Maximum concurrent requests to Z.AI API (prevents rate limiting).
+     */
+    private int maxConcurrentRequests = 2;
+
+    /**
+     * Semaphore to limit concurrent Z.AI API calls.
+     */
+    private Semaphore requestSemaphore;
+
+    /**
      * Enable thinking mode for GLM-4.7+ models.
      */
     private boolean thinkingEnabled = false;
@@ -96,9 +111,12 @@ public class ZaiConfig {
 
     @PostConstruct
     public void logConfiguration() {
+        // Initialize semaphore for rate limiting
+        this.requestSemaphore = new Semaphore(maxConcurrentRequests);
+
         if (isConfigured()) {
-            log.info("Z.AI LLM configured: model={}, temperature={}, maxTokens={}, topP={}, frequencyPenalty={}",
-                model, temperature, maxTokens, topP, frequencyPenalty);
+            log.info("Z.AI LLM configured: model={}, temperature={}, maxTokens={}, topP={}, frequencyPenalty={}, maxConcurrent={}",
+                model, temperature, maxTokens, topP, frequencyPenalty, maxConcurrentRequests);
             if (thinkingEnabled) {
                 log.info("Thinking mode enabled: type={}", thinkingType);
             }
@@ -108,7 +126,15 @@ public class ZaiConfig {
     }
 
     /**
-     * Create custom OkHttpClient with thinking mode interceptor if enabled.
+     * Get the request semaphore for rate limiting Z.AI calls.
+     */
+    public Semaphore getRequestSemaphore() {
+        return requestSemaphore;
+    }
+
+    /**
+     * Create custom OkHttpClient with thinking mode interceptor.
+     * The interceptor is always added to control reasoning_content in responses.
      */
     private OkHttpClient createHttpClient() {
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
@@ -116,9 +142,10 @@ public class ZaiConfig {
             .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
             .writeTimeout(timeoutSeconds, TimeUnit.SECONDS);
 
-        if (thinkingEnabled && thinkingInterceptor != null) {
+        // Always add interceptor to control thinking/reasoning_content behavior
+        if (thinkingInterceptor != null) {
             builder.addInterceptor(thinkingInterceptor);
-            log.debug("Added thinking mode interceptor to HTTP client");
+            log.debug("Added Z.AI request interceptor to HTTP client");
         }
 
         return builder.build();
@@ -159,6 +186,7 @@ public class ZaiConfig {
 
     /**
      * Create the Z.AI streaming chat model bean for real-time token streaming.
+     * Uses custom ZaiStreamingChatModel that properly handles thinking/reasoning_content.
      * If no API key is configured, returns a mock streaming model.
      */
     @Bean
@@ -169,25 +197,23 @@ public class ZaiConfig {
             return new MockStreamingChatLanguageModel();
         }
 
-        OpenAiStreamingChatModel.OpenAiStreamingChatModelBuilder builder = OpenAiStreamingChatModel.builder()
-            .apiKey(apiKey)
-            .baseUrl(baseUrl)
-            .modelName(model)
-            .temperature(temperature)
-            .timeout(Duration.ofSeconds(timeoutSeconds))
-            .maxTokens(maxTokens)
-            .topP(topP)
-            .frequencyPenalty(frequencyPenalty);
+        // Use custom Z.AI streaming model with shared OkHttpClient and semaphore for rate limiting
+        log.info("Creating ZaiStreamingChatModel with thinking={}, timeout={}s, maxConcurrent={}",
+            thinkingEnabled ? thinkingType : "disabled", timeoutSeconds, maxConcurrentRequests);
 
-        // Add custom headers for thinking mode if enabled
-        if (thinkingEnabled && thinkingInterceptor != null) {
-            builder.customHeaders(java.util.Map.of(
-                "X-Thinking-Mode", thinkingType
-            ));
-            log.info("Streaming chat model configured with thinking mode support");
-        }
-
-        return builder.build();
+        return ZaiStreamingChatModel.create(
+            apiKey,
+            baseUrl,
+            model,
+            temperature,
+            maxTokens,
+            topP,
+            frequencyPenalty,
+            Duration.ofSeconds(timeoutSeconds),
+            thinkingEnabled,
+            thinkingType,
+            requestSemaphore
+        );
     }
 
     /**
@@ -215,24 +241,10 @@ public class ZaiConfig {
             "connecting to the Z.AI API.";
 
         @Override
-        public dev.langchain4j.model.output.Response<dev.langchain4j.data.message.AiMessage> generate(
-                java.util.List<dev.langchain4j.data.message.ChatMessage> messages) {
-            return new dev.langchain4j.model.output.Response<>(
-                new dev.langchain4j.data.message.AiMessage(MOCK_RESPONSE));
-        }
-
-        @Override
-        public dev.langchain4j.model.output.Response<dev.langchain4j.data.message.AiMessage> generate(
-                java.util.List<dev.langchain4j.data.message.ChatMessage> messages,
-                java.util.List<dev.langchain4j.agent.tool.ToolSpecification> toolSpecifications) {
-            return generate(messages);
-        }
-
-        @Override
-        public dev.langchain4j.model.output.Response<dev.langchain4j.data.message.AiMessage> generate(
-                java.util.List<dev.langchain4j.data.message.ChatMessage> messages,
-                dev.langchain4j.agent.tool.ToolSpecification toolSpecification) {
-            return generate(messages);
+        public ChatResponse chat(ChatRequest request) {
+            return ChatResponse.builder()
+                .aiMessage(AiMessage.from(MOCK_RESPONSE))
+                .build();
         }
     }
 
@@ -248,45 +260,29 @@ public class ZaiConfig {
             "To get real LLM responses, please set the ZAI_API_KEY environment variable.";
 
         @Override
-        public void generate(java.util.List<dev.langchain4j.data.message.ChatMessage> messages,
-                            dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage> handler) {
+        public void chat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {
             try {
-                mockLog.debug("Mock streaming model generating response for {} messages", messages.size());
+                mockLog.debug("Mock streaming model generating response for request");
 
                 // Simulate streaming by sending the response word by word
                 String[] words = MOCK_RESPONSE.split(" ");
                 for (int i = 0; i < words.length; i++) {
                     String token = words[i] + (i < words.length - 1 ? " " : "");
-                    handler.onNext(token);
+                    handler.onPartialResponse(token);
                 }
 
                 // Create the response and complete
-                dev.langchain4j.data.message.AiMessage aiMessage =
-                    new dev.langchain4j.data.message.AiMessage(MOCK_RESPONSE);
-                dev.langchain4j.model.output.Response<dev.langchain4j.data.message.AiMessage> response =
-                    new dev.langchain4j.model.output.Response<>(aiMessage);
+                ChatResponse response = ChatResponse.builder()
+                    .aiMessage(AiMessage.from(MOCK_RESPONSE))
+                    .build();
 
-                handler.onComplete(response);
+                handler.onCompleteResponse(response);
                 mockLog.debug("Mock streaming model completed successfully");
 
             } catch (Exception e) {
                 mockLog.error("Mock streaming model error: {}", e.getMessage(), e);
                 handler.onError(e);
             }
-        }
-
-        @Override
-        public void generate(java.util.List<dev.langchain4j.data.message.ChatMessage> messages,
-                            java.util.List<dev.langchain4j.agent.tool.ToolSpecification> toolSpecifications,
-                            dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage> handler) {
-            generate(messages, handler);
-        }
-
-        @Override
-        public void generate(java.util.List<dev.langchain4j.data.message.ChatMessage> messages,
-                            dev.langchain4j.agent.tool.ToolSpecification toolSpecification,
-                            dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage> handler) {
-            generate(messages, handler);
         }
     }
 }

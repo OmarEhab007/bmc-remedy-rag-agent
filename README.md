@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/logo.svg" alt="BMC Remedy RAG Agent" width="180" height="180">
-</p>
-
 <h1 align="center">BMC Remedy RAG Agent</h1>
 
 <p align="center">
@@ -18,6 +14,7 @@
   <a href="#quick-start">Quick Start</a> •
   <a href="#configuration">Configuration</a> •
   <a href="#api-reference">API Reference</a> •
+  <a href="#agentic-operations">Agentic Operations</a> •
   <a href="#deployment">Deployment</a>
 </p>
 
@@ -35,6 +32,7 @@
   <img src="https://img.shields.io/badge/Air--Gapped-Supported-brightgreen?style=flat-square" alt="Air-Gapped"/>
   <img src="https://img.shields.io/badge/On--Premise-100%25-blue?style=flat-square" alt="On-Premise"/>
   <img src="https://img.shields.io/badge/Data%20Sovereignty-Guaranteed-orange?style=flat-square" alt="Data Sovereignty"/>
+  <img src="https://img.shields.io/badge/Agentic%20AI-Enabled-purple?style=flat-square" alt="Agentic"/>
 </p>
 
 ---
@@ -61,6 +59,7 @@ This agent transforms your historical ITSM data into an intelligent knowledge ba
 3. **Indexes** in PostgreSQL with pgvector for sub-second semantic search
 4. **Generates** context-aware answers using local or cloud LLMs
 5. **Cites** source tickets so agents can verify every response
+6. **Creates** incidents and work orders via agentic AI with confirmation workflow
 
 ---
 
@@ -75,6 +74,9 @@ This agent transforms your historical ITSM data into an intelligent knowledge ba
 | **Source Citations** | Every answer references specific incident numbers |
 | **Incremental Sync** | CDC-based updates keep the knowledge base current |
 | **ReBAC Security** | Users only see data from their authorized groups |
+| **Agentic Operations** | Create incidents and work orders via AI with confirmation workflow |
+| **Hybrid Search** | Combines vector similarity + full-text search via RRF |
+| **Bilingual Support** | English and Arabic interfaces with RTL support |
 
 ### Technical Highlights
 
@@ -82,25 +84,116 @@ This agent transforms your historical ITSM data into an intelligent knowledge ba
 |------------|----------------|
 | **100% Air-Gapped** | All components run on-premise with zero cloud dependencies |
 | **Local Embeddings** | ONNX `all-minilm-l6-v2` model (384 dimensions) |
-| **Local LLM** | Ollama with Llama 3 or Mistral — no API keys required |
+| **Flexible LLM** | Ollama (local) or Z.AI cloud with custom streaming handler |
 | **Native BMC API** | Direct Java RPC integration (not REST) for maximum throughput |
 | **Field ID Queries** | Immutable field IDs ensure stability across upgrades |
 | **Thread-Safe** | ThreadLocal pattern for non-thread-safe ARServerUser |
+| **Synchronized Streaming** | Token-level locking prevents race conditions in responses |
+| **HNSW Indexing** | Fast approximate nearest neighbor search (m=24, ef_construction=200) |
+| **Duplicate Detection** | Semantic similarity check before creating incidents |
 
 ---
 
 ## Architecture
 
+### System Overview
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff'}}}%%
+graph TB
+    subgraph UI["🖥️ User Interface"]
+        Web["React 19 Web Chat<br/>TypeScript • Tailwind CSS<br/>English/Arabic • Dark/Light"]
+    end
+
+    subgraph Gateway["🚪 API Gateway (Port 8080)"]
+        REST["REST Controllers"]
+        WS["WebSocket Streaming"]
+        Tools["Tool Server"]
+        OpenAI["OpenAI-Compatible API"]
+        Security["OAuth2/JWT • Rate Limiting"]
+    end
+
+    subgraph Services["⚙️ Core Services"]
+        direction LR
+        RAG["RAG Service<br/>LangChain4j • ReBAC<br/>Chat Memory • Agentic Tools"]
+        VEC["Vectorization Engine<br/>ONNX Embeddings<br/>Semantic Chunking"]
+    end
+
+    subgraph Storage["💾 Storage Layer"]
+        VS["Vector Store<br/>PostgreSQL + pgvector<br/>HNSW • Hybrid Search"]
+    end
+
+    subgraph Data["📋 Data Sources"]
+        RC["Remedy Connector<br/>ThreadLocal Pool<br/>Field ID Queries"]
+        BMC["BMC Remedy AR System<br/>9.x - 20.x"]
+        LLM["LLM Engine<br/>Ollama / Z.AI"]
+    end
+
+    UI --> Gateway
+    REST --> RAG
+    WS --> RAG
+    Tools --> RAG
+    OpenAI --> RAG
+
+    RAG --> VEC
+    RAG --> VS
+    RAG --> LLM
+    VEC --> VS
+
+    VS --> RC
+    RC --> BMC
+
+    classDef ui fill:#DBEAFE,stroke:#3B82F6,stroke-width:2px
+    classDef gateway fill:#FEF3C7,stroke:#F59E0B,stroke-width:2px
+    classDef services fill:#D1FAE5,stroke:#10B981,stroke-width:2px
+    classDef storage fill:#F3E8FF,stroke:#8B5CF6,stroke-width:2px
+    classDef data fill:#FEE2E2,stroke:#EF4444,stroke-width:2px
+
+    class Web ui
+    class REST,WS,Tools,OpenAI,Security gateway
+    class RAG,VEC services
+    class VS storage
+    class RC,BMC,LLM data
+```
+
+### Request Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 👤 User
+    participant W as 🌐 Web Chat
+    participant A as 🚪 API Gateway
+    participant R as 🧠 RAG Service
+    participant V as 📊 Vector Store
+    participant L as 🤖 LLM
+
+    U->>W: Ask question
+    W->>A: HTTP/WebSocket
+    A->>R: chat(sessionId, question)
+    R->>V: similaritySearch()
+    V-->>R: Relevant chunks
+    R->>L: generate(context + question)
+    L-->>R: Stream tokens
+    R-->>A: Stream response
+    A-->>W: WebSocket stream
+    W-->>U: Display answer with citations
+```
+
+### Text Diagram (Fallback)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              USER INTERFACE                                  │
-│                     React 19 • TypeScript • WebSocket                        │
+│           React 19 • TypeScript • WebSocket • Tailwind CSS                   │
+│                    English/Arabic • Dark/Light Theme                         │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              API GATEWAY                                     │
-│              REST Controllers • WebSocket Streaming • Health Checks          │
+│                              API GATEWAY (Port 8080)                         │
+│  REST Controllers • WebSocket Streaming • Tool Server • OpenAI-Compatible   │
+│     Rate Limiting (Resilience4j + Bucket4j) • OAuth2/JWT Security           │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                     ┌─────────────────┴─────────────────┐
@@ -109,39 +202,44 @@ This agent transforms your historical ITSM data into an intelligent knowledge ba
 │          RAG SERVICE            │   │       VECTORIZATION ENGINE          │
 │  • LangChain4j Orchestration    │   │  • ONNX Embeddings (all-minilm)     │
 │  • ReBAC Security Filtering     │   │  • Semantic Chunking Strategy       │
-│  • Chat Memory (PostgreSQL)     │   │  • Apache Tika (attachments)        │
+│  • Chat Memory (PostgreSQL)     │   │  • Apache Tika (PDF/Word/Excel)     │
+│  • Agentic Tools (@Tool)        │   │  • Query Rewriting & Expansion      │
+│  • Confirmation Service         │   │  • Context Injection                │
 └─────────────────────────────────┘   └─────────────────────────────────────┘
                     │                                   │
                     └─────────────────┬─────────────────┘
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                      VECTOR STORE (PostgreSQL + pgvector)                    │
-│              HNSW Indexing • JSONB Metadata • Cosine Similarity             │
+│     HNSW Indexing • Hybrid Search (RRF) • JSONB Metadata • Flyway           │
+│              Cosine Similarity • Full-Text Search • Action Audit            │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           REMEDY CONNECTOR                                   │
-│        ThreadLocal Connection Pool • Field ID Queries • Pagination          │
+│    ThreadLocal Connection Pool • Field ID Queries • Batch Pagination        │
+│      Incident Creator/Updater • Work Log Service • User Service             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        BMC REMEDY AR SYSTEM                                  │
-│            HPD:Help Desk • HPD:WorkLog • Knowledge Articles                 │
+│                        BMC REMEDY AR SYSTEM (9.x - 20.x)                     │
+│  HPD:Help Desk • HPD:WorkLog • WOI:WorkOrder • CHG:Infrastructure Change    │
+│                       RKM:KnowledgeArticleManager                            │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Module Structure
 
-| Module | Purpose |
-|--------|---------|
-| `remedy-connector` | Native BMC AR API integration with connection pooling |
-| `vectorization-engine` | Local embedding generation and content chunking |
-| `vector-store` | PostgreSQL + pgvector with Flyway migrations |
-| `rag-service` | LangChain4j orchestration, ReBAC, and chat memory |
-| `api-gateway` | REST/WebSocket APIs and Spring Boot bootstrap |
-| `frontend/web-chat` | React 19 + TypeScript + Tailwind CSS interface |
+| Module | Purpose | Key Components |
+|--------|---------|----------------|
+| `remedy-connector` | Native BMC AR API integration | ThreadLocalARContext, IncidentCreator, WorkLogService |
+| `vectorization-engine` | Local embedding generation and content chunking | LocalEmbeddingService, SemanticChunker, AttachmentParser |
+| `vector-store` | PostgreSQL + pgvector with Flyway migrations | VectorStoreService, HybridSearchService, IncrementalSyncService |
+| `rag-service` | LangChain4j orchestration, ReBAC, and chat memory | RagAssistantService, ConfirmationService, AgenticRateLimiter |
+| `api-gateway` | REST/WebSocket APIs and Spring Boot bootstrap | ChatController, ToolServerController, OpenAiCompatibleController |
+| `frontend/web-chat` | React 19 + TypeScript + Tailwind CSS interface | Chat, Citations, ServiceCatalog, i18n |
 
 ---
 
@@ -154,7 +252,7 @@ This agent transforms your historical ITSM data into an intelligent knowledge ba
 - **PostgreSQL 16** with pgvector extension
 - **Node.js 20+** (for frontend)
 - **BMC AR System 9.x–20.x** with Java API access
-- **Ollama** (recommended) or cloud LLM API
+- **Ollama** (recommended) or Z.AI API key
 
 ### Installation
 
@@ -197,6 +295,7 @@ docker-compose up -d
 | Web UI | http://localhost:5173 |
 | API | http://localhost:8080 |
 | Health Check | http://localhost:8080/api/v1/health |
+| OpenAI-Compatible | http://localhost:8080/v1/chat/completions |
 
 ---
 
@@ -224,10 +323,11 @@ POSTGRES_PASSWORD=your_secure_password
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3:8b
 
-# Option B: Cloud LLM (if network access available)
+# Option B: Z.AI Cloud LLM (GLM models)
 # ZAI_API_KEY=your_api_key
 # ZAI_BASE_URL=https://api.z.ai/api/paas/v4/
-# ZAI_MODEL=glm-4.7
+# ZAI_MODEL=glm-4.5-flash
+# ZAI_THINKING_ENABLED=false  # Set to true for GLM-4.7 reasoning mode
 
 # ─────────────────────────────────────────────────────────────
 # BMC REMEDY CONNECTION
@@ -236,13 +336,30 @@ REMEDY_SERVER=remedy.example.com
 REMEDY_PORT=7100
 REMEDY_USERNAME=raguser
 REMEDY_PASSWORD=your_remedy_password
+REMEDY_SOCKET_TIMEOUT=60000
+REMEDY_CHUNK_SIZE=500
 
 # ─────────────────────────────────────────────────────────────
 # RAG SETTINGS
 # ─────────────────────────────────────────────────────────────
 RAG_MAX_RESULTS=5
-RAG_MIN_SCORE=0.7
+RAG_MIN_SCORE=0.3
 RAG_REBAC_ENABLED=true
+RAG_MAX_MEMORY_MESSAGES=20
+
+# ─────────────────────────────────────────────────────────────
+# AGENTIC OPERATIONS
+# ─────────────────────────────────────────────────────────────
+AGENTIC_ENABLED=true
+AGENTIC_CONFIRMATION_TIMEOUT=5
+AGENTIC_MAX_CREATIONS_PER_HOUR=10
+AGENTIC_DUPLICATE_THRESHOLD=0.85
+
+# ─────────────────────────────────────────────────────────────
+# SECURITY
+# ─────────────────────────────────────────────────────────────
+SECURITY_ENABLED=false  # Set to true for production
+JWT_JWK_SET_URI=your_jwks_endpoint
 ```
 
 ### Ollama Setup
@@ -284,7 +401,8 @@ Content-Type: application/json
 {
   "sessionId": "session-123",
   "question": "How do I reset VPN access?",
-  "userGroups": ["IT Support", "Service Desk"]
+  "userGroups": ["IT Support", "Service Desk"],
+  "sourceTypes": ["Incident", "KnowledgeArticle"]
 }
 ```
 
@@ -294,7 +412,8 @@ Content-Type: application/json
   "sessionId": "session-123",
   "response": "Based on historical tickets, here's how to reset VPN access:\n\n1. Navigate to the VPN self-service portal...\n\n(Source: INC000123456)",
   "sources": ["INC000123456", "KB0001234"],
-  "hasContext": true
+  "hasContext": true,
+  "timestamp": 1705484800000
 }
 ```
 
@@ -306,6 +425,14 @@ ws.send(JSON.stringify({
   sessionId: 'session-123',
   question: 'How do I resolve printer issues?'
 }));
+
+// Receive streaming tokens
+ws.onmessage = (event) => {
+  const chunk = JSON.parse(event.data);
+  // chunk.type: THINKING | TOKEN | COMPLETE | ERROR
+  // chunk.content: token text or final response
+  // chunk.sources: array of source IDs (on COMPLETE)
+};
 ```
 
 ### Search Endpoints
@@ -323,21 +450,137 @@ Content-Type: application/json
 }
 ```
 
-### Ingestion Endpoints
+### OpenAI-Compatible API
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/ingest/incidents` | POST | Trigger full incident ingestion |
-| `/api/v1/ingest/sync` | POST | Run incremental sync (CDC) |
-| `/api/v1/ingest/status` | GET | Check ingestion status |
+For integration with Open WebUI and other tools:
+
+```http
+POST /v1/chat/completions
+Content-Type: application/json
+
+{
+  "model": "bmc-remedy-rag",
+  "messages": [
+    {"role": "user", "content": "How do I reset a password?"}
+  ],
+  "stream": true
+}
+```
 
 ### Health Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `/api/v1/health` | Application health status |
-| `/api/v1/health/db` | Database connectivity |
-| `/api/v1/health/remedy` | Remedy connection status |
+| `GET /api/v1/health` | Application health status |
+| `GET /api/v1/ready` | Kubernetes readiness probe |
+| `GET /api/v1/live` | Kubernetes liveness probe |
+
+---
+
+## Agentic Operations
+
+The agent can create and update incidents directly in BMC Remedy with a mandatory confirmation workflow.
+
+### Confirmation Workflow Diagram
+
+```mermaid
+%%{init: {'theme': 'base'}}%%
+flowchart LR
+    subgraph Request["1️⃣ Request"]
+        A["User: Create incident<br/>for VPN issues"]
+    end
+
+    subgraph Validation["2️⃣ Validation"]
+        B{"Duplicate<br/>Check"}
+        C["Rate Limit<br/>(10/hour)"]
+    end
+
+    subgraph Staging["3️⃣ Staging"]
+        D["Create Pending<br/>Action (5-min TTL)"]
+        E["Return<br/>actionId"]
+    end
+
+    subgraph Confirm["4️⃣ Confirmation"]
+        F["User: confirm<br/>abc12345"]
+        G{"Confirmed?"}
+    end
+
+    subgraph Execute["5️⃣ Execution"]
+        H["Create in<br/>Remedy"]
+        I["Audit Log"]
+        J["Return<br/>INC000001"]
+    end
+
+    A --> B
+    B -->|"No duplicates"| C
+    B -->|"Found similar"| K["Warn User"]
+    K --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G -->|"Yes"| H
+    G -->|"No"| L["Cancelled"]
+    H --> I
+    I --> J
+
+    style A fill:#DBEAFE,stroke:#3B82F6
+    style J fill:#D1FAE5,stroke:#10B981
+    style L fill:#FEE2E2,stroke:#EF4444
+```
+
+### Available Tools
+
+| Tool | Method | Description |
+|------|--------|-------------|
+| **RemedyIncidentTool** | `searchSimilarIncidents` | Find duplicate incidents before creation |
+| **RemedyIncidentTool** | `stageIncidentCreation` | Stage a new incident for user confirmation |
+| **RemedyWorkOrderTool** | `stageWorkOrderCreation` | Stage a new work order |
+
+### Confirmation Workflow Steps
+
+1. **User Request**: "Create an incident for VPN timeout issues"
+2. **Duplicate Check**: Agent searches for similar existing incidents
+3. **Staging**: If unique, creates pending action with 5-minute expiry
+4. **Confirmation Prompt**: Returns actionId for user to confirm
+5. **Execution**: On `confirm {actionId}`, creates in Remedy
+6. **Audit**: All actions logged for compliance
+
+### Tool Server Endpoints
+
+```http
+# Search incidents
+POST /tool-server/incidents/search
+{
+  "query": "VPN connection timeout",
+  "limit": 5,
+  "minScore": 0.3
+}
+
+# Create incident (staged)
+POST /tool-server/incidents
+{
+  "summary": "VPN connection timeout",
+  "description": "Users experiencing timeout...",
+  "impact": 3,
+  "urgency": 2
+}
+
+# Confirm action
+POST /tool-server/actions/confirm
+{
+  "actionId": "abc12345",
+  "sessionId": "session-123"
+}
+```
+
+### Rate Limiting
+
+| Limiter | Rate | Scope |
+|---------|------|-------|
+| Chat | 100/min | Per-instance |
+| Search | 200/min | Per-instance |
+| Actions | 10/hour | Per-user |
 
 ---
 
@@ -356,6 +599,8 @@ The agent uses immutable Field IDs (not field names) for query stability:
 | Status | `7` | Filter for Resolved/Closed tickets |
 | Last Modified Date | `6` | CDC timestamp (Unix epoch) |
 | Assigned Group | `1000000217` | ReBAC security filtering |
+| Impact | `1000000163` | Incident impact (1-4) |
+| Urgency | `1000000162` | Incident urgency (1-4) |
 
 ### Connection Best Practices
 
@@ -372,6 +617,40 @@ QualifierInfo qualifier = new QualifierInfo("6 > " + lastSyncTimestamp);
 // ✗ Never use date strings
 QualifierInfo qualifier = new QualifierInfo("6 > '01/01/2024'");
 ```
+
+---
+
+## Security
+
+### Relationship-Based Access Control (ReBAC)
+
+The agent enforces access control at the vector level:
+
+1. **Ingestion**: Each chunk stores the source ticket's `Assigned Group`
+2. **Query**: User's group memberships are passed with each request
+3. **Filtering**: Vector search returns only authorized content
+
+```java
+// Example: User in "IT Support" group
+// Can see: Tickets assigned to "IT Support"
+// Cannot see: Tickets assigned to "HR", "Finance"
+```
+
+### Input Validation
+
+The agent protects against prompt injection and other attacks:
+
+- Regex patterns detect override attempts
+- Field length validation (Summary: 255, Description: 32000)
+- HTML stripping and content sanitization
+- Delimiter injection detection
+
+### Authentication
+
+| Mode | Configuration |
+|------|---------------|
+| Development | `SECURITY_ENABLED=false` |
+| Production | `SECURITY_ENABLED=true` with OAuth2/OIDC |
 
 ---
 
@@ -405,31 +684,6 @@ kubectl get pods -n bmc-rag
 
 ---
 
-## Security
-
-### Relationship-Based Access Control (ReBAC)
-
-The agent enforces access control at the vector level:
-
-1. **Ingestion**: Each chunk stores the source ticket's `Assigned Group`
-2. **Query**: User's group memberships are passed with each request
-3. **Filtering**: Vector search returns only authorized content
-
-```java
-// Example: User in "IT Support" group
-// Can see: Tickets assigned to "IT Support"
-// Cannot see: Tickets assigned to "HR", "Finance"
-```
-
-### Authentication
-
-| Mode | Configuration |
-|------|---------------|
-| Development | `SECURITY_ENABLED=false` |
-| Production | `SECURITY_ENABLED=true` with OAuth2/OIDC |
-
----
-
 ## Troubleshooting
 
 ### Common Errors
@@ -440,6 +694,10 @@ The agent enforces access control at the vector level:
 | `ARERR 92` | Network RPC timeout | Increase `REMEDY_SOCKET_TIMEOUT` |
 | `Connection refused` | BMC API jar missing | Run `mvn install:install-file` |
 | `pgvector does not exist` | Extension not enabled | Run `CREATE EXTENSION vector;` |
+| Scrambled text in streaming | Token ordering race condition | Fixed in v1.1 - tokens now synchronized |
+| `response cannot be null` | Z.AI reasoning_content issue | Fixed in v1.1 - custom streaming model |
+| `429 Rate Limit` | Z.AI API concurrency limit | Reduce concurrent requests or contact Z.AI |
+| `ARERR 9251/9252` | Connection pool issues | Retry with delay (auto-handled) |
 
 ### Logs
 
@@ -471,7 +729,12 @@ mvn clean package -pl rag-service -am
 ### Run Locally
 
 ```bash
+# Using script
 ./start-dev.sh
+
+# Or use start-all.sh / stop-all.sh
+./start-all.sh
+./stop-all.sh
 ```
 
 ### Frontend Development
@@ -488,15 +751,34 @@ npm run dev
 
 ```
 bmc-remedy-rag-agent/
-├── api-gateway/           # REST/WebSocket endpoints
-├── rag-service/           # LangChain4j orchestration
-├── remedy-connector/      # BMC AR API integration
-├── vector-store/          # PostgreSQL + pgvector
-├── vectorization-engine/  # Embeddings and chunking
-├── frontend/web-chat/     # React UI
-├── docker/                # Docker Compose setup
-├── docs/                  # Additional documentation
-└── pom.xml                # Parent POM (Maven)
+├── api-gateway/                 # REST/WebSocket endpoints
+│   ├── src/main/java/.../controller/  # Controllers
+│   ├── src/main/java/.../config/      # Security, CORS, WebSocket
+│   └── src/main/resources/            # application.yml, static/
+├── rag-service/                 # LangChain4j orchestration
+│   ├── src/main/java/.../service/     # RagAssistantService
+│   ├── src/main/java/.../tools/       # RemedyIncidentTool, etc.
+│   ├── src/main/java/.../security/    # ReBAC, InputValidator
+│   └── src/main/java/.../confirmation/ # Agentic confirmation
+├── remedy-connector/            # BMC AR API integration
+│   ├── src/main/java/.../connection/  # ThreadLocalARContext
+│   ├── src/main/java/.../creator/     # IncidentCreator, IncidentUpdater
+│   ├── src/main/java/.../service/     # WorkLogService, RemedyUserService
+│   └── src/main/java/.../util/        # FieldIdConstants
+├── vector-store/                # PostgreSQL + pgvector
+│   ├── src/main/java/.../service/     # VectorStoreService, HybridSearchService
+│   └── src/main/resources/db/migration/ # V1-V10 Flyway migrations
+├── vectorization-engine/        # Embeddings and chunking
+│   ├── src/main/java/.../embedding/   # LocalEmbeddingService
+│   ├── src/main/java/.../chunking/    # SemanticChunker, *ChunkStrategy
+│   └── src/main/java/.../tika/        # AttachmentParser
+├── frontend/web-chat/           # React 19 UI
+│   ├── src/components/          # Chat, Messages, Citations
+│   └── src/providers/           # ChatProvider, LanguageProvider
+├── docker/                      # Docker Compose setup
+├── docs/                        # Additional documentation
+├── BMC/                         # BMC AR API jar
+└── pom.xml                      # Parent POM (Maven)
 ```
 
 ---
@@ -506,14 +788,76 @@ bmc-remedy-rag-agent/
 | Document | Description |
 |----------|-------------|
 | [DOCUMENTATION.md](DOCUMENTATION.md) | Complete technical documentation |
-| [docs/API.md](docs/API.md) | API reference and examples |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development guide |
+| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Quick reference guide |
+
+---
+
+## Changelog
+
+### v1.2.0 (January 2026)
+
+#### New Features
+
+- **Agentic Operations**: Create and update incidents via AI with confirmation workflow
+- **Tool Server**: OpenAI-compatible endpoints for Open WebUI integration
+- **Hybrid Search**: Combined vector + full-text search using Reciprocal Rank Fusion (RRF)
+- **Duplicate Detection**: Semantic similarity check before incident creation
+- **Action Audit**: Full audit trail for agentic operations
+
+#### Enhancements
+
+- HNSW index tuning (m=24, ef_construction=200) for 1M+ embeddings
+- Query rewriting with typo correction and abbreviation expansion
+- Per-user rate limiting with Bucket4j
+- Enhanced chat memory retention scheduling
+
+### v1.1.0 (January 2026)
+
+#### Bug Fixes
+
+- **Fixed scrambled text in streaming responses**: Added synchronized token processing
+- **Fixed "response cannot be null" error with Z.AI**: Custom streaming model with thinking mode handling
+
+### v1.0.0 (Initial Release)
+
+- Core RAG functionality with BMC Remedy integration
+- Local embeddings with all-minilm-l6-v2
+- PostgreSQL + pgvector for vector storage
+- WebSocket streaming chat interface
+- ReBAC security filtering
+
+---
+
+## Application Management
+
+### Start the Application
+
+```bash
+cd /Users/omar/Developer/BmcRemedyAgent/bmc-remedy-rag-agent
+
+# Using scripts
+./start-all.sh    # Start all services
+./stop-all.sh     # Stop all services
+
+# Or manually
+source .env && java -jar api-gateway/target/api-gateway-1.0.0-SNAPSHOT.jar
+```
+
+### Quick Commands
+
+| Action | Command |
+|--------|---------|
+| Check if running | `lsof -i:8080` |
+| View logs | `tail -f /tmp/rag-app.log` |
+| Health check | `curl http://localhost:8080/api/v1/health` |
+| Rebuild | `mvn clean package -DskipTests` |
+| Stop backend | `lsof -ti:8080 \| xargs kill -9` |
 
 ---
 
 ## License
 
-Proprietary — Copyright 2025. All rights reserved.
+Proprietary — Copyright 2025-2026. All rights reserved.
 
 ---
 
@@ -524,3 +868,4 @@ Proprietary — Copyright 2025. All rights reserved.
 - **[Ollama](https://ollama.com)** — Local LLM runtime
 - **[Apache Tika](https://tika.apache.org)** — Document content extraction
 - **BMC Software** — AR System Java API
+
