@@ -66,7 +66,7 @@ remedy:
 # =============================================================================
 google-ai:
   enabled: true
-  api-key: ${GOOGLE_AI_API_KEY:AIzaSyBAmx31DJQzUjUux7g5_R4szKQL4k6W1Ng}
+  api-key: ${GOOGLE_AI_API_KEY}
   model: ${GOOGLE_AI_MODEL:gemini-2.0-flash}
   temperature: 0.1
   max-tokens: 4096
