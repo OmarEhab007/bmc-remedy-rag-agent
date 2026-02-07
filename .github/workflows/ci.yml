@@ -34,6 +34,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      - name: Install BMC AR API to local Maven repo
+        run: |
+          mvn install:install-file \
+            -Dfile=BMC/arAPI-91.9.jar \
+            -DgroupId=com.bmc.arsys \
+            -DartifactId=arAPI \
+            -Dversion=91.9 \
+            -Dpackaging=jar \
+            -q
+
       - name: Build and verify
         run: ./mvnw clean verify -B
 

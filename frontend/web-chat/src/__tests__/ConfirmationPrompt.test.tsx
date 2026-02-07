@@ -113,11 +113,11 @@ describe('ConfirmationPrompt', () => {
 
   it('shows loading state during confirmation', async () => {
     const user = userEvent.setup()
-    let resolveConfirm: (value: any) => void
-    const confirmPromise = new Promise((resolve) => {
+    let resolveConfirm: (value: unknown) => void
+    const confirmPromise = new Promise<unknown>((resolve) => {
       resolveConfirm = resolve
     })
-    vi.mocked(actionsApi.confirmAction).mockReturnValue(confirmPromise as any)
+    vi.mocked(actionsApi.confirmAction).mockReturnValue(confirmPromise as Promise<{ success: boolean }>)
 
     render(<ConfirmationPrompt {...defaultProps} />)
 

@@ -52,6 +52,7 @@ describe('CitationBlock', () => {
   })
 
   it('renders nothing when citations is undefined', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { container } = render(<CitationBlock citations={undefined as any} />)
 
     expect(container.firstChild).toBeNull()

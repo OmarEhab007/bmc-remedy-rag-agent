@@ -79,8 +79,6 @@ class VectorStoreServiceTest {
         when(embeddingRepository.searchSimilar(anyString(), eq(maxResults), eq(minScore)))
             .thenReturn(mockDbResults);
 
-        when(embeddingRepository.count()).thenReturn(100L);
-
         // When
         List<SearchResult> results = vectorStoreService.search(query, maxResults, minScore);
 

@@ -80,9 +80,8 @@ export function ChatProvider({ children }: ChatProviderProps) {
       if (!sessionId) return;
 
       switch (chunk.type) {
-        case ChunkType.THINKING:
+        case ChunkType.THINKING: {
           setThinking(true);
-          // Create a placeholder message for the assistant response
           const assistantMessage: ChatMessage = {
             id: chunk.messageId,
             role: 'assistant',
@@ -93,6 +92,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
           addMessage(sessionId, assistantMessage);
           setPendingMessageId(chunk.messageId);
           break;
+        }
 
         case ChunkType.TOKEN:
           setThinking(false);
@@ -383,6 +383,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useChatContext(): ChatContextValue {
   const context = useContext(ChatContext);
   if (!context) {

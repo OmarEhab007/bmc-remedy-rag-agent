@@ -284,7 +284,9 @@ $$ LANGUAGE plpgsql;
 -- 4. Add metadata column for language detection
 -- ============================================================================
 
--- Add language column to track content language
+-- Add language column to track content language.
+-- Language detection is performed application-side (VectorStoreService.detectLanguage())
+-- and set during ingestion. Default 'en' for existing rows; new rows are classified on insert.
 ALTER TABLE embedding_store ADD COLUMN IF NOT EXISTS detected_language VARCHAR(10) DEFAULT 'en';
 
 -- Create index for language-filtered queries

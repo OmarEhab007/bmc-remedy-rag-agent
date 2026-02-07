@@ -436,17 +436,19 @@ public class RagAssistantService {
                     }
                 }
 
-                // Normal token processing - check and set truncation atomically
-                int newLength = fullResponse.length() + token.length();
-                if (newLength > MAX_RESPONSE_SIZE) {
-                    if (truncated.compareAndSet(false, true)) {
-                        log.warn("Response exceeded max size ({} chars), truncating for session {}",
-                            MAX_RESPONSE_SIZE, sessionId);
-                        tokenConsumer.accept("\n\n[Response truncated due to length]");
+                // Normal token processing - synchronized to prevent race between length check and append
+                synchronized (fullResponse) {
+                    int newLength = fullResponse.length() + token.length();
+                    if (newLength > MAX_RESPONSE_SIZE) {
+                        if (truncated.compareAndSet(false, true)) {
+                            log.warn("Response exceeded max size ({} chars), truncating for session {}",
+                                MAX_RESPONSE_SIZE, sessionId);
+                            tokenConsumer.accept("\n\n[Response truncated due to length]");
+                        }
+                        return;
                     }
-                    return;
+                    fullResponse.append(token);
                 }
-                fullResponse.append(token);
                 tokenConsumer.accept(token);
             }
 
