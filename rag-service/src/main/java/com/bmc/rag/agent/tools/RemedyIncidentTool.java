@@ -396,8 +396,8 @@ public class RemedyIncidentTool {
                 boolean isTicketRequest = (lower.contains("create") || lower.contains("open") ||
                                            lower.contains("submit") || lower.contains("log") ||
                                            lower.contains("raise") || lower.contains("file")) &&
-                                          (lower.contains("ticket") || lower.contains("incident") ||
-                                           lower.contains("issue") && lower.length() < 50);
+                                          ((lower.contains("ticket") || lower.contains("incident") ||
+                                           lower.contains("issue")) && lower.length() < 50);
 
                 if (isTicketRequest && !containsProblemIndicators(content)) {
                     continue;

@@ -657,7 +657,7 @@ public class OpenAiCompatibleController {
         String lower = description.toLowerCase();
 
         // Common issue patterns
-        if (lower.contains("vpn") && (lower.contains("authentication") || lower.contains("login") || lower.contains("connect"))) {
+        if (lower.contains("vpn") && (lower.contains("authentication") || lower.contains("login"))) {
             return "VPN authentication error";
         }
         if (lower.contains("vpn") && lower.contains("connect")) {

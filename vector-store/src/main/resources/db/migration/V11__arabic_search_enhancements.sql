@@ -109,14 +109,6 @@ BEGIN
         -- Reciprocal Rank Fusion across all three result sets
         SELECT
             COALESCE(v.id, en.id, ar.id) as id,
-            v.chunk_id,
-            v.text_segment,
-            v.source_type,
-            v.source_id,
-            v.entry_id,
-            v.chunk_type,
-            v.sequence_number,
-            v.metadata,
             COALESCE(v.score, 0)::float as vector_score,
             COALESCE(en.score, 0)::float as english_text_score,
             COALESCE(ar.score, 0)::float as arabic_text_score,
@@ -130,21 +122,21 @@ BEGIN
         FULL OUTER JOIN arabic_text_results ar ON COALESCE(v.id, en.id) = ar.id
     )
     SELECT
-        c.id,
-        c.chunk_id,
-        c.text_segment,
-        c.source_type,
-        c.source_id,
-        c.entry_id,
-        c.chunk_type,
-        c.sequence_number,
-        c.metadata,
+        e.id,
+        e.chunk_id,
+        e.text_segment,
+        e.source_type,
+        e.source_id,
+        e.entry_id,
+        e.chunk_type,
+        e.sequence_number,
+        e.metadata,
         c.vector_score,
         c.english_text_score,
         c.arabic_text_score,
         c.hybrid_score
     FROM combined c
-    WHERE c.id IS NOT NULL
+    JOIN embedding_store e ON e.id = c.id
     ORDER BY c.hybrid_score DESC
     LIMIT max_results;
 END;
@@ -232,14 +224,6 @@ BEGIN
     combined AS (
         SELECT
             COALESCE(v.id, en.id, ar.id) as id,
-            v.chunk_id,
-            v.text_segment,
-            v.source_type,
-            v.source_id,
-            v.entry_id,
-            v.chunk_type,
-            v.sequence_number,
-            v.metadata,
             COALESCE(v.score, 0)::float as vector_score,
             COALESCE(en.score, 0)::float as english_text_score,
             COALESCE(ar.score, 0)::float as arabic_text_score,
@@ -253,21 +237,21 @@ BEGIN
         FULL OUTER JOIN arabic_text_results ar ON COALESCE(v.id, en.id) = ar.id
     )
     SELECT
-        c.id,
-        c.chunk_id,
-        c.text_segment,
-        c.source_type,
-        c.source_id,
-        c.entry_id,
-        c.chunk_type,
-        c.sequence_number,
-        c.metadata,
+        e.id,
+        e.chunk_id,
+        e.text_segment,
+        e.source_type,
+        e.source_id,
+        e.entry_id,
+        e.chunk_type,
+        e.sequence_number,
+        e.metadata,
         c.vector_score,
         c.english_text_score,
         c.arabic_text_score,
         c.hybrid_score
     FROM combined c
-    WHERE c.id IS NOT NULL
+    JOIN embedding_store e ON e.id = c.id
     ORDER BY c.hybrid_score DESC
     LIMIT max_results;
 END;
