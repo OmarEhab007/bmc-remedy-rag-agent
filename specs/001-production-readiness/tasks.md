@@ -142,6 +142,20 @@
 
 ---
 
+## Phase 7.5: Data Layer Enhancements (Priority: P3) - JPA & Migration
+
+**Goal**: Improve data layer with JPA configuration refactoring and Arabic/bilingual search support
+
+### Implementation
+
+- [ ] T039 [P] Move `@EnableJpaRepositories` and `@EntityScan` from main application class to dedicated `JpaConfig.java` in `api-gateway/src/main/java/com/bmc/rag/api/config/` to avoid forcing JPA bootstrap in `@WebMvcTest` slices
+- [ ] T040 [P] Apply V11 Flyway migration `vector-store/src/main/resources/db/migration/V11__arabic_search_enhancements.sql` - adds Arabic tsvector column, bilingual hybrid search functions, detected_language column, and GIN indexes
+- [ ] T041 [P] Populate `detected_language` column in `VectorStoreService.storeBatch()` in `vector-store/src/main/java/com/bmc/rag/store/service/VectorStoreService.java` - add Unicode-based Arabic character detection
+
+**Checkpoint**: JPA config is isolated for test slices. Bilingual search functions available. Language detection populates on insert.
+
+---
+
 ## Phase 8: Polish & Cross-Cutting Concerns
 
 **Purpose**: Final validation and cleanup
@@ -245,5 +259,5 @@ With multiple developers:
 - [Story] label maps task to specific user story for traceability
 - Phase 2 (Foundational) is ALREADY COMPLETE - security fixes applied to branch
 - Phase 7 (US5) is MOSTLY COMPLETE - configuration externalized
-- Total: 38 tasks (5 setup, 5 foundational done, 3 US1, 3 US2, 6 US3, 10 US4, 2 US5, 4 polish)
-- Parallel opportunities: 26 of 38 tasks can run in parallel with others
+- Total: 41 tasks (5 setup, 5 foundational done, 3 US1, 3 US2, 6 US3, 10 US4, 2 US5, 3 data layer, 4 polish)
+- Parallel opportunities: 29 of 41 tasks can run in parallel with others

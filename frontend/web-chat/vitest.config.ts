@@ -10,6 +10,9 @@ export default defineConfig({
     setupFiles: './vitest.setup.ts',
     css: true,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+    },
   },
   resolve: {
     alias: {

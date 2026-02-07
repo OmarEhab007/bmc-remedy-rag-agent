@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ChatMain } from '../components/ChatMain'
 import type { ChatState, ChatSession, UserContext } from '../types/chat'
@@ -20,8 +20,8 @@ vi.mock('../components/InputArea', () => ({
   InputArea: () => <div data-testid="input-area">Input</div>,
 }))
 
-// Mock ChatProvider
-const mockChatContext = {
+// Default mock context - can be overridden per test via mutable variable
+const createMockChatContext = (overrides: Record<string, unknown> = {}) => ({
   state: {
     sessions: [],
     activeSessionId: 'session-1',
@@ -52,11 +52,18 @@ const mockChatContext = {
   clearCurrentSession: vi.fn(),
   setUserContext: vi.fn(),
   reconnect: vi.fn(),
-}
+  ...overrides,
+})
+
+let mockChatContext = createMockChatContext()
 
 vi.mock('../providers/ChatProvider', () => ({
   useChatContext: () => mockChatContext,
 }))
+
+beforeEach(() => {
+  mockChatContext = createMockChatContext()
+})
 
 describe('ChatMain', () => {
   it('renders without crashing', () => {
@@ -78,12 +85,7 @@ describe('ChatMain', () => {
     expect(screen.getByTestId('input-area')).toBeInTheDocument()
   })
 
-  it('displays error banner when error exists', () => {
-    // Note: This test would require remocking the ChatProvider context
-    // Skipping implementation-specific test for now since component is mocked
-    // In a real test environment, you'd use a custom render with provider
-    expect(true).toBe(true)
-  })
+  it.todo('displays error banner when error exists')
 
   it('has correct main element with tabIndex', () => {
     const { container } = render(<ChatMain />)
@@ -124,14 +126,9 @@ describe('ChatMain - Integration scenarios', () => {
       ],
     }
 
-    const contextWithMessages = {
-      ...mockChatContext,
+    mockChatContext = createMockChatContext({
       activeSession: sessionWithMessages,
-    }
-
-    vi.mocked(
-      vi.importActual('../providers/ChatProvider') as any
-    ).useChatContext = () => contextWithMessages
+    })
 
     render(<ChatMain />)
 
@@ -148,14 +145,9 @@ describe('ChatMain - Integration scenarios', () => {
       messages: [],
     }
 
-    const contextWithEmptySession = {
-      ...mockChatContext,
+    mockChatContext = createMockChatContext({
       activeSession: emptySession,
-    }
-
-    vi.mocked(
-      vi.importActual('../providers/ChatProvider') as any
-    ).useChatContext = () => contextWithEmptySession
+    })
 
     render(<ChatMain />)
 
@@ -163,14 +155,9 @@ describe('ChatMain - Integration scenarios', () => {
   })
 
   it('handles null active session', () => {
-    const contextWithoutSession = {
-      ...mockChatContext,
+    mockChatContext = createMockChatContext({
       activeSession: null,
-    }
-
-    vi.mocked(
-      vi.importActual('../providers/ChatProvider') as any
-    ).useChatContext = () => contextWithoutSession
+    })
 
     render(<ChatMain />)
 

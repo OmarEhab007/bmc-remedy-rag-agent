@@ -126,13 +126,11 @@ describe('InlineCitation', () => {
     expect(screen.getByText('INC000123')).toBeInTheDocument()
   })
 
-  it('stops event propagation on click', () => {
+  it('renders as a clickable link with href', () => {
     const { container } = render(<InlineCitation recordId="INC000123" />)
 
     const link = container.querySelector('a')
     expect(link).toBeInTheDocument()
-
-    // The onClick handler is attached, verify component renders correctly
     expect(link?.getAttribute('href')).toBeTruthy()
   })
 

@@ -65,7 +65,7 @@ curl http://localhost:8080/actuator/health | jq .
 - `.github/workflows/docker.yml` - Docker image build on release tags
 
 ### Observability
-- `logback-spring.xml` - JSON structured logging in prod profile
+- `logback-spring.xml` - JSON-structured logging in prod profile
 - Correlation ID filter for request tracing
 - Custom health indicators for LLM and embedding services
 

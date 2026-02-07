@@ -73,12 +73,13 @@ public class VectorStoreService {
 
         String sql = """
             INSERT INTO embedding_store (id, chunk_id, embedding, text_segment, source_type,
-                source_id, entry_id, chunk_type, sequence_number, metadata)
-            VALUES (?, ?, ?::vector, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                source_id, entry_id, chunk_type, sequence_number, metadata, detected_language)
+            VALUES (?, ?, ?::vector, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
             ON CONFLICT (chunk_id) DO UPDATE SET
                 embedding = EXCLUDED.embedding,
                 text_segment = EXCLUDED.text_segment,
                 metadata = EXCLUDED.metadata,
+                detected_language = EXCLUDED.detected_language,
                 updated_at = NOW()
             """;
 
@@ -108,6 +109,7 @@ public class VectorStoreService {
                     }
                     ps.setInt(9, chunk.getSequenceNumber());
                     ps.setString(10, formatMetadata(chunk.getMetadata()));
+                    ps.setString(11, detectLanguage(chunk.getContent()));
                 });
 
             processed += batchChunks.size();
@@ -318,6 +320,38 @@ public class VectorStoreService {
         return "{" + values.stream()
             .map(v -> "\"" + v.replace("\"", "\"\"") + "\"")
             .collect(Collectors.joining(",")) + "}";
+    }
+
+    /**
+     * Detect the primary language of text content based on Arabic Unicode character ratio.
+     * Returns "ar" if majority Arabic, "mixed" if significant Arabic presence, otherwise "en".
+     */
+    private String detectLanguage(String text) {
+        if (text == null || text.isBlank()) {
+            return "en";
+        }
+        int arabicCount = 0;
+        int letterCount = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isLetter(c)) {
+                letterCount++;
+                // Arabic Unicode block: U+0600–U+06FF
+                if (c >= '\u0600' && c <= '\u06FF') {
+                    arabicCount++;
+                }
+            }
+        }
+        if (letterCount == 0) {
+            return "en";
+        }
+        double ratio = (double) arabicCount / letterCount;
+        if (ratio > 0.5) {
+            return "ar";
+        } else if (ratio > 0.1) {
+            return "mixed";
+        }
+        return "en";
     }
 
     /**
