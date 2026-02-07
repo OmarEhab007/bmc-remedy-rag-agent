@@ -473,7 +473,10 @@ public class AgenticSystemPrompt {
                 }
             } else if (msg instanceof AiMessage aiMsg) {
                 String aiText = aiMsg.text();
-                if (aiText != null && aiText.length() > 500) {
+                if (aiText == null) {
+                    continue;
+                }
+                if (aiText.length() > 500) {
                     aiText = aiText.substring(0, 500) + "...";
                 }
                 section.append("Assistant: ").append(aiText).append("\n");

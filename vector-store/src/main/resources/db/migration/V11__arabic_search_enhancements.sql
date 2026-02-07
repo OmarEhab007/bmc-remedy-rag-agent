@@ -220,6 +220,7 @@ BEGIN
             ROW_NUMBER() OVER (ORDER BY ts_rank_cd(e.text_search_vector, plainto_tsquery('english', query_text)) DESC) as rank
         FROM embedding_store e
         WHERE e.text_search_vector @@ plainto_tsquery('english', query_text)
+            AND ts_rank_cd(e.text_search_vector, plainto_tsquery('english', query_text)) >= 0.01
             AND (
                 e.metadata->>'assigned_group' IS NULL
                 OR e.metadata->>'assigned_group' = ANY(allowed_groups)
@@ -233,6 +234,7 @@ BEGIN
             ROW_NUMBER() OVER (ORDER BY ts_rank_cd(e.text_search_arabic, plainto_tsquery('simple', query_text)) DESC) as rank
         FROM embedding_store e
         WHERE e.text_search_arabic @@ plainto_tsquery('simple', query_text)
+            AND ts_rank_cd(e.text_search_arabic, plainto_tsquery('simple', query_text)) >= 0.01
             AND (
                 e.metadata->>'assigned_group' IS NULL
                 OR e.metadata->>'assigned_group' = ANY(allowed_groups)

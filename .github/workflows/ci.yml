@@ -71,7 +71,6 @@ jobs:
         run: npm run lint
 
       - name: Run tests
-        continue-on-error: true
         run: npm test -- --reporter=verbose
 
       - name: Build
