@@ -393,11 +393,11 @@ public class RemedyIncidentTool {
 
                 // Skip messages that are just ticket creation requests
                 String lower = content.toLowerCase();
-                boolean isTicketRequest = (lower.contains("create") || lower.contains("open") ||
-                                           lower.contains("submit") || lower.contains("log") ||
-                                           lower.contains("raise") || lower.contains("file")) &&
-                                          ((lower.contains("ticket") || lower.contains("incident") ||
-                                           lower.contains("issue")) && lower.length() < 50);
+                // Detect ticket creation requests using proximity: intent verb near ticket noun
+                boolean isTicketRequest = lower.matches(
+                    ".*(create|open|submit|log|raise|file).{0,30}(ticket|incident|issue).*") ||
+                    lower.matches(
+                    ".*(ticket|incident|issue).{0,30}(create|open|submit|log|raise|file).*");
 
                 if (isTicketRequest && !containsProblemIndicators(content)) {
                     continue;

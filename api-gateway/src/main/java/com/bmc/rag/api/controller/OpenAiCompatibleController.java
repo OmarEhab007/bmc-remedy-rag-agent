@@ -597,8 +597,7 @@ public class OpenAiCompatibleController {
                lower.equals("with this issue") ||
                lower.equals("with this problem") ||
                lower.equals("new incident") ||
-               lower.equals("new ticket") ||
-               lower.length() < 10;  // Very short summaries are likely vague
+               lower.equals("new ticket");
     }
 
     /**
@@ -1032,7 +1031,11 @@ public class OpenAiCompatibleController {
                 log.info("Using action ID from conversation history: {}", actionId);
             } else {
                 // Fall back to looking up pending actions for this session
-                String pendingUrl = toolServerBaseUrl + "/tool-server/actions/pending?sessionId=" + sessionId;
+                String pendingUrl = org.springframework.web.util.UriComponentsBuilder
+                    .fromUriString(toolServerBaseUrl)
+                    .path("/tool-server/actions/pending")
+                    .queryParam("sessionId", sessionId)
+                    .build().toUriString();
 
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> pendingActions = restTemplate.getForObject(pendingUrl, List.class);
@@ -1048,7 +1051,12 @@ public class OpenAiCompatibleController {
             }
 
             // Confirm the action
-            String confirmUrl = toolServerBaseUrl + "/tool-server/actions/confirm?actionId=" + actionId + "&sessionId=" + sessionId;
+            String confirmUrl = org.springframework.web.util.UriComponentsBuilder
+                .fromUriString(toolServerBaseUrl)
+                .path("/tool-server/actions/confirm")
+                .queryParam("actionId", actionId)
+                .queryParam("sessionId", sessionId)
+                .build().toUriString();
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.set("X-Session-Id", sessionId);
@@ -1101,7 +1109,11 @@ public class OpenAiCompatibleController {
                 log.info("Using action ID from conversation history: {}", actionId);
             } else {
                 // Fall back to looking up pending actions for this session
-                String pendingUrl = toolServerBaseUrl + "/tool-server/actions/pending?sessionId=" + sessionId;
+                String pendingUrl = org.springframework.web.util.UriComponentsBuilder
+                    .fromUriString(toolServerBaseUrl)
+                    .path("/tool-server/actions/pending")
+                    .queryParam("sessionId", sessionId)
+                    .build().toUriString();
 
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> pendingActions = restTemplate.getForObject(pendingUrl, List.class);
@@ -1117,7 +1129,12 @@ public class OpenAiCompatibleController {
             }
 
             // Cancel the action
-            String cancelUrl = toolServerBaseUrl + "/tool-server/actions/cancel?actionId=" + actionId + "&sessionId=" + sessionId;
+            String cancelUrl = org.springframework.web.util.UriComponentsBuilder
+                .fromUriString(toolServerBaseUrl)
+                .path("/tool-server/actions/cancel")
+                .queryParam("actionId", actionId)
+                .queryParam("sessionId", sessionId)
+                .build().toUriString();
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.set("X-Session-Id", sessionId);

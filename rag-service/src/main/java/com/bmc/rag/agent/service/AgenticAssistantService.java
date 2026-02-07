@@ -335,7 +335,12 @@ public class AgenticAssistantService {
         }
 
         if (implicitCount >= 2) {
-            // Strong implicit signals suggest action needed
+            // Strong implicit signals suggest action needed - check for work order signals
+            String lower = message.toLowerCase();
+            if (lower.contains("work order") || lower.contains("work_order") ||
+                lower.contains(" wo ") || message.contains("أمر عمل")) {
+                return IntentClassification.ACTION_WORKORDER;
+            }
             return IntentClassification.ACTION_INCIDENT;
         } else if (implicitCount == 1) {
             // Single implicit signal - ambiguous

@@ -269,4 +269,49 @@ class VectorStoreServiceTest {
 
         return results;
     }
+
+    // ========== detectLanguage tests ==========
+
+    @Test
+    void detectLanguage_pureEnglish_returnsEn() {
+        String result = ReflectionTestUtils.invokeMethod(vectorStoreService, "detectLanguage",
+            "This is a test incident with VPN connection failure");
+        assertEquals("en", result);
+    }
+
+    @Test
+    void detectLanguage_pureArabic_returnsAr() {
+        String result = ReflectionTestUtils.invokeMethod(vectorStoreService, "detectLanguage",
+            "مشكلة في الاتصال بالشبكة الافتراضية");
+        assertEquals("ar", result);
+    }
+
+    @Test
+    void detectLanguage_mixedContent_returnsMixed() {
+        // Arabic > 10% but < 50% → mixed
+        String result = ReflectionTestUtils.invokeMethod(vectorStoreService, "detectLanguage",
+            "VPN connection issue الشبكة الافتراضية problem");
+        assertEquals("mixed", result);
+    }
+
+    @Test
+    void detectLanguage_nullInput_returnsEn() {
+        String result = ReflectionTestUtils.invokeMethod(vectorStoreService, "detectLanguage",
+            (String) null);
+        assertEquals("en", result);
+    }
+
+    @Test
+    void detectLanguage_blankInput_returnsEn() {
+        String result = ReflectionTestUtils.invokeMethod(vectorStoreService, "detectLanguage",
+            "   ");
+        assertEquals("en", result);
+    }
+
+    @Test
+    void detectLanguage_numbersOnly_returnsEn() {
+        String result = ReflectionTestUtils.invokeMethod(vectorStoreService, "detectLanguage",
+            "12345 67890");
+        assertEquals("en", result);
+    }
 }

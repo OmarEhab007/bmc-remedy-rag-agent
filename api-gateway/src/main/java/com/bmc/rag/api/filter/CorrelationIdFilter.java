@@ -30,7 +30,10 @@ import java.util.UUID;
 public class CorrelationIdFilter extends OncePerRequestFilter {
 
     private static final String CORRELATION_ID_HEADER = "X-Correlation-ID";
+    private static final String SESSION_ID_HEADER = "X-Session-Id";
     private static final String CORRELATION_ID_MDC_KEY = "correlationId";
+    private static final String SESSION_ID_MDC_KEY = "sessionId";
+    private static final String USER_ID_MDC_KEY = "userId";
 
     @Override
     protected void doFilterInternal(
@@ -43,9 +46,22 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             MDC.put(CORRELATION_ID_MDC_KEY, correlationId);
             response.setHeader(CORRELATION_ID_HEADER, correlationId);
 
+            // Populate sessionId from request header (used by chat/agentic endpoints)
+            String sessionId = request.getHeader(SESSION_ID_HEADER);
+            if (sessionId != null && !sessionId.isBlank()) {
+                MDC.put(SESSION_ID_MDC_KEY, sessionId);
+            }
+
+            // Populate userId from authenticated principal if available
+            if (request.getUserPrincipal() != null) {
+                MDC.put(USER_ID_MDC_KEY, request.getUserPrincipal().getName());
+            }
+
             filterChain.doFilter(request, response);
         } finally {
             MDC.remove(CORRELATION_ID_MDC_KEY);
+            MDC.remove(SESSION_ID_MDC_KEY);
+            MDC.remove(USER_ID_MDC_KEY);
         }
     }
 }

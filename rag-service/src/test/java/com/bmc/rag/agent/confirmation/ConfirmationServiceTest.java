@@ -66,6 +66,10 @@ class ConfirmationServiceTest {
             rateLimiter,
             TIMEOUT_MINUTES
         );
+
+        // Stub auditRepository.save() globally - called by all stage*() methods
+        lenient().when(auditRepository.save(any(ActionAuditEntity.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -77,9 +81,6 @@ class ConfirmationServiceTest {
             .impact(3)
             .urgency(3)
             .build();
-
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         PendingAction action = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
@@ -114,9 +115,6 @@ class ConfirmationServiceTest {
             .description("Install Adobe Acrobat")
             .build();
 
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-
         // When
         PendingAction action = confirmationService.stageWorkOrderCreation(SESSION_ID, USER_ID, request);
 
@@ -137,9 +135,6 @@ class ConfirmationServiceTest {
             .status(4)
             .resolution("VPN service restarted")
             .build();
-
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         PendingAction action = confirmationService.stageIncidentUpdate(SESSION_ID, USER_ID, request);
@@ -162,10 +157,6 @@ class ConfirmationServiceTest {
             .impact(3)
             .urgency(3)
             .build();
-
-        // Stub save before stageIncidentCreation since it calls auditRepository.save()
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
         String actionId = stagedAction.getActionId();
@@ -239,6 +230,9 @@ class ConfirmationServiceTest {
             .urgency(3)
             .build();
 
+        when(auditRepository.save(any(ActionAuditEntity.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
         PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
 
         // Manually set expiry to past
@@ -264,10 +258,6 @@ class ConfirmationServiceTest {
             .impact(3)
             .urgency(3)
             .build();
-
-        // Stub save before stageIncidentCreation since it calls auditRepository.save()
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
         String actionId = stagedAction.getActionId();
@@ -301,10 +291,6 @@ class ConfirmationServiceTest {
             .impact(3)
             .urgency(3)
             .build();
-
-        // Stub save before stageIncidentCreation since it calls auditRepository.save()
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
         String actionId = stagedAction.getActionId();
