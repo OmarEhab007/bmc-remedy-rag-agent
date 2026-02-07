@@ -1,0 +1,9 @@
+# Test-only application configuration.
+# Provides safe defaults for properties that would otherwise cause
+# test context failures.
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+security:
+  enabled: false

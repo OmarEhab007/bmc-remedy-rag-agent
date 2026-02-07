@@ -149,7 +149,14 @@ public class WebSocketChatController {
             message.getUserGroups() != null ? message.getUserGroups() : Collections.emptySet()
         );
 
-        // Use streaming chat
+        // Check for agentic intent first (ticket creation, confirmation, etc.)
+        if (ragAssistantService.hasAgenticIntent(message.getText())) {
+            log.info("WebSocket: Agentic intent detected, using non-streaming path");
+            handleAgenticRequest(wsSessionId, destination, message, sessionId, userContext);
+            return;
+        }
+
+        // Use streaming chat for non-agentic requests
         ragAssistantService.chatWithStreaming(
             sessionId,
             message.getText(),
@@ -197,6 +204,56 @@ public class WebSocketChatController {
                 }
             }
         );
+    }
+
+    /**
+     * Handle agentic requests (ticket creation, confirmation, etc.) via non-streaming path.
+     * This ensures conversation history is passed to the agentic service for context extraction.
+     */
+    private void handleAgenticRequest(
+            String wsSessionId,
+            String destination,
+            ChatQueryMessage message,
+            String sessionId,
+            UserContext userContext) {
+
+        try {
+            // Use the agentic-aware chat method which passes conversation history
+            var response = ragAssistantService.chatWithAgenticSupport(
+                sessionId,
+                message.getText(),
+                message.getUserId(),
+                userContext
+            );
+
+            // Send the response as a single token block
+            sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
+                .messageId(message.getMessageId())
+                .sessionId(sessionId)
+                .token(response.getResponse())
+                .type(ChunkType.TOKEN)
+                .build());
+
+            // Send completion
+            sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
+                .messageId(message.getMessageId())
+                .sessionId(sessionId)
+                .type(ChunkType.COMPLETE)
+                .isComplete(true)
+                .citations(Collections.emptyList())
+                .confidenceScore(1.0)
+                .build());
+
+        } catch (Exception e) {
+            log.error("Error in agentic WebSocket request: {}", e.getMessage(), e);
+            sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
+                .messageId(message.getMessageId())
+                .sessionId(sessionId)
+                .type(ChunkType.ERROR)
+                .error("Error processing request: " + e.getMessage())
+                .isComplete(true)
+                .build());
+        }
     }
 
     /**

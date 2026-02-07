@@ -32,14 +32,21 @@ public class RemedyIncidentTool {
     @Value("${agentic.duplicate-detection.similarity-threshold:0.85}")
     private double duplicateThreshold;
 
-    // Thread-local context for current user/session
+    // Thread-local context for current user/session and conversation
     private static final ThreadLocal<ToolContext> currentContext = new ThreadLocal<>();
 
     /**
      * Set the context for the current tool execution.
      */
     public static void setContext(String sessionId, String userId) {
-        currentContext.set(new ToolContext(sessionId, userId));
+        currentContext.set(new ToolContext(sessionId, userId, null));
+    }
+
+    /**
+     * Set the context with conversation history for context extraction.
+     */
+    public static void setContext(String sessionId, String userId, List<dev.langchain4j.data.message.ChatMessage> conversationHistory) {
+        currentContext.set(new ToolContext(sessionId, userId, conversationHistory));
     }
 
     /**
@@ -129,10 +136,10 @@ public class RemedyIncidentTool {
      * @param urgency Urgency level: 1=Critical, 2=High, 3=Medium, 4=Low
      * @return Confirmation prompt for the user
      */
-    @Tool("Stage a new incident for creation. The user must confirm before it's created. Returns a confirmation prompt.")
+    @Tool("Stage a new incident for creation. CRITICAL: Extract the SPECIFIC technical issue from conversation history using format '[System] - [Symptom]'. Examples: 'Outlook email - cannot login with password', 'VPN - connection timeout error'. NEVER use vague summaries like 'email issue', 'this issue', or 'login problem' - these will be REJECTED.")
     public String stageIncidentCreation(
-            @P("Brief summary of the incident (max 255 characters)") String summary,
-            @P("Detailed description of the issue") String description,
+            @P("SPECIFIC summary: '[System Name] - [Exact Symptom]'. Example: 'CST Outlook email - cannot login with username/password'. NEVER use vague text like 'email issue' or 'with this issue'") String summary,
+            @P("Detailed description extracted from conversation: what system, what error, what symptoms, what user tried") String description,
             @P("Impact: 1=Extensive/Widespread, 2=Significant/Large, 3=Moderate/Limited, 4=Minor/Localized") Integer impact,
             @P("Urgency: 1=Critical, 2=High, 3=Medium, 4=Low") Integer urgency) {
 
@@ -149,13 +156,42 @@ public class RemedyIncidentTool {
             );
         }
 
-        // Validate inputs
-        var summaryValidation = inputValidator.validateSummary(summary);
+        // Truncate summary if too long (max 255 chars for BMC Remedy)
+        String enrichedSummary = summary;
+        if (enrichedSummary != null && enrichedSummary.length() > 250) {
+            enrichedSummary = enrichedSummary.substring(0, 247) + "...";
+            log.info("Summary truncated from {} to {} chars", summary.length(), enrichedSummary.length());
+        }
+        String enrichedDescription = description;
+        var summaryValidation = inputValidator.validateSummary(enrichedSummary);
         if (!summaryValidation.valid()) {
-            return "❌ **Validation Error:** " + String.join(", ", summaryValidation.errors());
+            // Check if it's a vague summary error (LLM failed to extract issue)
+            boolean isVagueSummaryError = summaryValidation.errors().stream()
+                .anyMatch(e -> e.toLowerCase().contains("vague"));
+
+            if (isVagueSummaryError) {
+                log.info("Vague summary detected, attempting to extract issue from conversation history");
+                String extractedIssue = extractIssueFromConversation(ctx);
+
+                if (extractedIssue != null) {
+                    enrichedSummary = generateSummaryFromIssue(extractedIssue);
+                    enrichedDescription = extractedIssue;
+                    log.info("Enriched summary from conversation: '{}'", enrichedSummary);
+
+                    // Re-validate with enriched summary
+                    summaryValidation = inputValidator.validateSummary(enrichedSummary);
+                    if (!summaryValidation.valid()) {
+                        return "❌ **Validation Error:** " + String.join(", ", summaryValidation.errors());
+                    }
+                } else {
+                    return "❌ **Validation Error:** " + String.join(", ", summaryValidation.errors());
+                }
+            } else {
+                return "❌ **Validation Error:** " + String.join(", ", summaryValidation.errors());
+            }
         }
 
-        var descValidation = inputValidator.validateDescription(description);
+        var descValidation = inputValidator.validateDescription(enrichedDescription);
         if (!descValidation.valid()) {
             return "❌ **Validation Error:** " + String.join(", ", descValidation.errors());
         }
@@ -189,10 +225,10 @@ public class RemedyIncidentTool {
             // Continue with creation - duplicate check is best-effort
         }
 
-        // Build the request
+        // Build the request with enriched/sanitized values
         IncidentCreationRequest request = IncidentCreationRequest.builder()
             .summary(summaryValidation.sanitizedInput())
-            .description(descValidation.sanitizedInput())
+            .description(descValidation.sanitizedInput() != null ? descValidation.sanitizedInput() : enrichedDescription)
             .impact(impact)
             .urgency(urgency)
             .createdBy(ctx.userId())
@@ -328,7 +364,125 @@ public class RemedyIncidentTool {
     }
 
     /**
-     * Context for tool execution.
+     * Context for tool execution including conversation history.
      */
-    public record ToolContext(String sessionId, String userId) {}
+    public record ToolContext(
+        String sessionId,
+        String userId,
+        List<dev.langchain4j.data.message.ChatMessage> conversationHistory
+    ) {}
+
+    /**
+     * Extract the actual technical issue from conversation history.
+     * Used when LLM passes vague summaries like "this issue".
+     */
+    private String extractIssueFromConversation(ToolContext ctx) {
+        if (ctx.conversationHistory() == null || ctx.conversationHistory().isEmpty()) {
+            return null;
+        }
+
+        StringBuilder issueDetails = new StringBuilder();
+        String primaryIssue = null;
+
+        // Scan conversation from oldest to newest, building up issue context
+        for (int i = 0; i < ctx.conversationHistory().size(); i++) {
+            var msg = ctx.conversationHistory().get(i);
+            if (msg instanceof dev.langchain4j.data.message.UserMessage userMsg) {
+                String content = userMsg.singleText();
+                if (content == null) continue;
+
+                // Skip messages that are just ticket creation requests
+                String lower = content.toLowerCase();
+                boolean isTicketRequest = (lower.contains("create") || lower.contains("open") ||
+                                           lower.contains("submit") || lower.contains("log") ||
+                                           lower.contains("raise") || lower.contains("file")) &&
+                                          (lower.contains("ticket") || lower.contains("incident") ||
+                                           lower.contains("issue") && lower.length() < 50);
+
+                if (isTicketRequest && !containsProblemIndicators(content)) {
+                    continue;
+                }
+
+                // Check if this message describes a problem
+                if (containsProblemIndicators(content)) {
+                    if (primaryIssue == null) {
+                        primaryIssue = content;
+                    }
+                    // Add to issue details (avoiding duplicates)
+                    if (!issueDetails.toString().contains(content)) {
+                        if (issueDetails.length() > 0) {
+                            issueDetails.append(" ");
+                        }
+                        issueDetails.append(content);
+                    }
+                }
+            }
+        }
+
+        if (primaryIssue != null) {
+            String fullIssue = issueDetails.toString().trim();
+            log.info("Extracted issue from conversation: '{}' (full context: {} chars)",
+                primaryIssue.length() > 60 ? primaryIssue.substring(0, 60) + "..." : primaryIssue,
+                fullIssue.length());
+            return fullIssue.isEmpty() ? primaryIssue : fullIssue;
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if text contains problem/issue indicators.
+     */
+    private boolean containsProblemIndicators(String text) {
+        if (text == null || text.length() < 10) return false;
+        String lower = text.toLowerCase();
+
+        // Problem indicators
+        return lower.contains("error") ||
+               lower.contains("not working") ||
+               lower.contains("can't") ||
+               lower.contains("cannot") ||
+               lower.contains("won't") ||
+               lower.contains("doesn't") ||
+               lower.contains("failed") ||
+               lower.contains("crash") ||
+               lower.contains("broken") ||
+               lower.contains("issue") ||
+               lower.contains("problem") ||
+               lower.contains("stuck") ||
+               lower.contains("slow") ||
+               lower.contains("timeout") ||
+               lower.contains("unable to") ||
+               lower.contains("need help") ||
+               lower.contains("not receiving") ||
+               lower.contains("stopped") ||
+               lower.contains("password") ||
+               lower.contains("login") ||
+               lower.contains("access") ||
+               lower.contains("reset");
+    }
+
+    /**
+     * Generate a clean summary from the extracted issue.
+     */
+    private String generateSummaryFromIssue(String issue) {
+        if (issue == null) return null;
+
+        // Take first sentence or first 100 chars
+        String summary = issue;
+        int periodIdx = issue.indexOf('.');
+        if (periodIdx > 20 && periodIdx < 200) {
+            summary = issue.substring(0, periodIdx);
+        }
+
+        // Truncate to max 200 chars for summary
+        if (summary.length() > 200) {
+            summary = summary.substring(0, 197) + "...";
+        }
+
+        // Clean up
+        summary = summary.replaceAll("\\s+", " ").trim();
+
+        return summary;
+    }
 }

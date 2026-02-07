@@ -2,6 +2,7 @@ package com.bmc.rag.agent.retrieval;
 
 import com.bmc.rag.agent.config.RagConfig;
 import com.bmc.rag.agent.security.ReBACFilter;
+import com.bmc.rag.agent.util.ArabicTextProcessor;
 import com.bmc.rag.store.service.VectorStoreService;
 import com.bmc.rag.store.service.VectorStoreService.SearchResult;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 /**
  * Secure content retriever with ReBAC (Relationship-Based Access Control).
  * Retrieves relevant content from the vector store while respecting access controls.
+ * Supports bilingual Arabic/English queries with dialect normalization.
  */
 @Slf4j
 @Component
@@ -25,6 +27,8 @@ public class SecureContentRetriever {
     private final VectorStoreService vectorStoreService;
     private final ReBACFilter rebacFilter;
     private final RagConfig ragConfig;
+    private final QueryRewriter queryRewriter;
+    private final ArabicTextProcessor arabicTextProcessor;
 
     /**
      * Retrieve relevant content for a query with security filtering.
@@ -37,8 +41,11 @@ public class SecureContentRetriever {
         // Validate query to prevent DoS via large queries
         validateQuery(query);
 
-        log.info("Retrieving content for query: '{}' with maxResults={}, minScore={}",
-            truncateForLog(query), ragConfig.getMaxResults(), ragConfig.getMinScore());
+        // Preprocess query: Arabic dialect normalization + term expansion
+        String processedQuery = preprocessQuery(query);
+
+        log.info("Retrieving content for query: '{}' (processed: '{}') with maxResults={}, minScore={}",
+            truncateForLog(query), truncateForLog(processedQuery), ragConfig.getMaxResults(), ragConfig.getMinScore());
 
         // Perform vector search with ATOMIC ReBAC filtering at database level (P0.3)
         // This prevents race condition where unauthorized data could be seen during post-filtering
@@ -48,7 +55,7 @@ public class SecureContentRetriever {
             // ATOMIC: ReBAC filtering happens IN the database query, not post-query
             // This is the ONLY correct way to implement ReBAC - never fetch unauthorized data
             rawResults = vectorStoreService.searchWithGroups(
-                query,
+                processedQuery,
                 ragConfig.getMaxResults(),  // No need for extra fetch - filtering is atomic
                 ragConfig.getMinScore(),
                 userContext.getGroupsAsList()
@@ -57,7 +64,7 @@ public class SecureContentRetriever {
         } else {
             // No ReBAC filtering required
             rawResults = vectorStoreService.search(
-                query,
+                processedQuery,
                 ragConfig.getMaxResults(),
                 ragConfig.getMinScore()
             );
@@ -219,6 +226,35 @@ public class SecureContentRetriever {
             metadata != null ? metadata.get("assigned_group") : null,
             result.getScore()
         );
+    }
+
+    /**
+     * Preprocess query for improved retrieval.
+     * Applies Arabic dialect normalization and query rewriting.
+     */
+    private String preprocessQuery(String query) {
+        String processed = query;
+
+        // Step 1: Arabic preprocessing (dialect normalization, numeral conversion)
+        if (arabicTextProcessor != null && arabicTextProcessor.containsArabic(query)) {
+            var arabicResult = arabicTextProcessor.processArabicQuery(query);
+            if (arabicResult.wasModified()) {
+                processed = arabicResult.processed();
+                log.debug("Arabic preprocessing applied: '{}' → '{}'",
+                    truncateForLog(query), truncateForLog(processed));
+            }
+        }
+
+        // Step 2: Query rewriting (abbreviation expansion, synonym addition, Arabic term expansion)
+        if (queryRewriter != null) {
+            var rewriteResult = queryRewriter.rewrite(processed);
+            if (rewriteResult.wasModified()) {
+                processed = rewriteResult.getQueryForSearch();
+                log.debug("Query rewritten with {} modifications", rewriteResult.modifications().size());
+            }
+        }
+
+        return processed;
     }
 
     /**

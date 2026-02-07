@@ -145,6 +145,9 @@ public class HybridSearchService {
      * Higher values = better recall, slower search.
      */
     public void setEfSearch(int efSearch) {
+        if (efSearch < 1 || efSearch > 1000) {
+            throw new IllegalArgumentException("ef_search must be between 1 and 1000, got: " + efSearch);
+        }
         jdbcTemplate.execute("SET hnsw.ef_search = " + efSearch);
         log.debug("Set hnsw.ef_search = {}", efSearch);
     }

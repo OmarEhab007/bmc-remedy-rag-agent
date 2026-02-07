@@ -1,0 +1,79 @@
+openapi: "3.0.3"
+info:
+  title: BMC Remedy RAG Agent - Health API
+  version: "1.0.0"
+  description: Health check endpoints for production monitoring
+
+paths:
+  /actuator/health:
+    get:
+      summary: System health check
+      description: Returns aggregate health status of all system components
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        "200":
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: UP
+                components:
+                  db:
+                    status: UP
+                    details:
+                      database: PostgreSQL
+                      validationQuery: "isValid()"
+                  llm:
+                    status: UP
+                    details:
+                      provider: google-ai
+                      model: gemini-2.0-flash
+                  embedding:
+                    status: UP
+                    details:
+                      model: all-minilm-l6-v2
+                      dimensions: 384
+        "503":
+          description: System is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: DOWN
+                components:
+                  db:
+                    status: DOWN
+                    details:
+                      error: "Connection refused"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+        components:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ComponentHealth"
+
+    ComponentHealth:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN, UNKNOWN]
+        details:
+          type: object
+          additionalProperties: true

@@ -106,8 +106,8 @@ zai:
 # RAG Configuration
 # =============================================================================
 rag:
-  max-results: ${RAG_MAX_RESULTS:5}
-  min-score: ${RAG_MIN_SCORE:0.3}
+  max-results: ${RAG_MAX_RESULTS:7}
+  min-score: ${RAG_MIN_SCORE:0.5}  # Unified across all environments for consistency
   max-memory-messages: 20
   include-citations: true
   prioritize-knowledge-articles: true
@@ -231,6 +231,32 @@ rag:
     - **Mixed query** → Use the dominant language
     - **Technical terms** → Keep in original language for clarity
 
+    ### Arabic Language Quality Standards (معايير جودة اللغة العربية)
+    When responding in Arabic:
+    1. **Use Modern Standard Arabic (الفصحى) exclusively** - never use colloquial dialects (Gulf, Egyptian, Levantine)
+    2. **Technical terms** may remain in English with Arabic transliteration in parentheses:
+       - Example: VPN (الشبكة الافتراضية الخاصة)
+       - Example: Password Reset (إعادة تعيين كلمة المرور)
+    3. **Numbers:** Use Western Arabic numerals (1, 2, 3) not Eastern (١، ٢، ٣) for IDs, codes, and references
+    4. **Citations:** Keep source references in English format: (Source: INC-12345)
+    5. **Formatting:** Maintain proper right-to-left formatting for Arabic text blocks
+
+    ### Forbidden Arabic Patterns (أنماط محظورة)
+    - ❌ Do NOT use Gulf dialect expressions (وش، شلون، ابي)
+    - ❌ Do NOT use Egyptian dialect (إزاي، فين، عايز)
+    - ❌ Do NOT transliterate English phonetically (لا تكتب "أوكي" بدلاً من "حسناً")
+    - ❌ Do NOT mix sentence-level languages (one Arabic sentence, then one English sentence)
+
+    ## 📊 CONFIDENCE-BASED RESPONSE GUIDELINES
+    Adjust your response style based on context relevance:
+
+    | Confidence Level | Response Style | Example Phrasing |
+    |------------------|----------------|------------------|
+    | **High (≥0.8)** | Present confidently with citation | "The password reset process requires..." / "عملية إعادة تعيين كلمة المرور تتطلب..." |
+    | **Medium (0.6-0.8)** | Add hedging language | "Based on available information..." / "وفقاً للمعلومات المتوفرة..." |
+    | **Low (0.3-0.6)** | State uncertainty clearly | "I found related but not exact information..." / "وجدت معلومات ذات صلة ولكن غير مطابقة تماماً..." |
+    | **Very Low (<0.3)** | Acknowledge lack of information | "I don't have specific information about..." / "لا تتوفر لدي معلومات محددة عن..." |
+
     ## 📚 CITATION FORMAT
     Always cite sources when using context information:
     - Format: `(Source: TYPE-ID)` at the end of relevant information
@@ -256,6 +282,24 @@ rag:
     - [ ] Matches the user's language preference
 
 # =============================================================================
+# Query Rewriting Configuration
+# =============================================================================
+query-rewrite:
+  enabled: true
+  use-llm: false  # Set to true to use LLM for sophisticated rewriting
+  arabic-expansion: true  # Enable Arabic IT term expansion for bilingual search
+
+# =============================================================================
+# Hybrid Search Configuration (Vector + BM25)
+# =============================================================================
+hybrid-search:
+  enabled: ${HYBRID_SEARCH_ENABLED:true}
+  vector-weight: ${HYBRID_VECTOR_WEIGHT:0.6}
+  english-text-weight: ${HYBRID_ENGLISH_WEIGHT:0.25}
+  arabic-text-weight: ${HYBRID_ARABIC_WEIGHT:0.15}
+  rrf-k: ${HYBRID_RRF_K:60}  # RRF constant (higher = more weight to top results)
+
+# =============================================================================
 # Agentic Operations Configuration (Section 12)
 # =============================================================================
 agentic:
@@ -275,6 +319,12 @@ agentic:
     enabled: true
     include-payloads: false  # Don't log request payloads (may contain sensitive data)
     retention-days: 90
+
+# =============================================================================
+# Tool Server Configuration
+# =============================================================================
+tool-server:
+  base-url: ${TOOL_SERVER_BASE_URL:http://localhost:${server.port:8080}}
 
 # =============================================================================
 # Sync Configuration
