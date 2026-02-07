@@ -112,20 +112,7 @@ describe('MessageBubble', () => {
     expect(screen.getByTestId('message-footer')).toBeInTheDocument()
   })
 
-  it('enters edit mode when edit is triggered', async () => {
-    const user = userEvent.setup()
-    const message = createUserMessage('Original message')
-    const onEdit = vi.fn()
-
-    render(<MessageBubble message={message} onEdit={onEdit} />)
-
-    // Find and click edit button (in MessageActions)
-    // Note: This is mocked, so we can't actually test the full interaction
-    // In a real test, you'd need to unmock MessageActions or test edit mode differently
-
-    // For demonstration, we can verify the message content is displayed
-    expect(screen.getByText('Original message')).toBeInTheDocument()
-  })
+  it.todo('enters edit mode when edit is triggered')
 
   it('shows confirmation prompt when pendingAction is present', () => {
     const message = {

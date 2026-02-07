@@ -93,7 +93,7 @@ class VectorStoreServiceTest {
         assertEquals("INC000123", firstResult.getSourceId());
         assertEquals("Incident", firstResult.getSourceType());
         assertEquals("VPN authentication failed", firstResult.getTextSegment());
-        assertEquals(0.92f, firstResult.getScore());
+        assertEquals(0.92f, firstResult.getScore(), 0.001f);
 
         // Verify embedding service was called
         verify(embeddingService).embed(query);

@@ -60,7 +60,7 @@ components:
       properties:
         status:
           type: string
-          enum: [UP, DOWN]
+          enum: [UP, DOWN, DEGRADED]
         components:
           type: object
           additionalProperties:

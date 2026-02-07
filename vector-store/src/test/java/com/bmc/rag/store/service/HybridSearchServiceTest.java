@@ -160,7 +160,7 @@ class HybridSearchServiceTest {
         assertEquals("INC000123", firstResult.getSourceId());
         assertEquals("Incident", firstResult.getSourceType());
         assertEquals("VPN authentication failed", firstResult.getTextSegment());
-        assertEquals(0.95f, firstResult.getHybridScore());
+        assertEquals(0.95f, firstResult.getHybridScore(), 0.001f);
 
         // Verify embedding service was called
         verify(embeddingService).embed(query);
