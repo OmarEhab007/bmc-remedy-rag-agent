@@ -250,7 +250,7 @@ public class WebSocketChatController {
                 .messageId(message.getMessageId())
                 .sessionId(sessionId)
                 .type(ChunkType.ERROR)
-                .error("Error processing request: " + e.getMessage())
+                .error("I encountered an error processing your request. Please try again.")
                 .isComplete(true)
                 .build());
         }
