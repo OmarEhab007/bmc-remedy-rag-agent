@@ -60,7 +60,7 @@ export function CodeBlock({ code, language, className = '' }: CodeBlockProps) {
   );
 }
 
-// Helper to extract code blocks from markdown
+// eslint-disable-next-line react-refresh/only-export-components
 export function extractCodeBlocks(markdown: string): Array<{
   type: 'text' | 'code';
   content: string;

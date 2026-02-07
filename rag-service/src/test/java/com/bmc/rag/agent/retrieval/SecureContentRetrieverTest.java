@@ -3,6 +3,7 @@ package com.bmc.rag.agent.retrieval;
 import com.bmc.rag.agent.config.RagConfig;
 import com.bmc.rag.agent.security.ReBACFilter;
 import com.bmc.rag.agent.retrieval.SecureContentRetriever.UserContext;
+import com.bmc.rag.agent.util.ArabicTextProcessor;
 import com.bmc.rag.store.service.VectorStoreService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,11 +35,28 @@ class SecureContentRetrieverTest {
     @Mock
     private RagConfig ragConfig;
 
+    @Mock
+    private QueryRewriter queryRewriter;
+
+    @Mock
+    private ArabicTextProcessor arabicTextProcessor;
+
     private SecureContentRetriever retriever;
 
     @BeforeEach
     void setUp() {
-        retriever = new SecureContentRetriever(vectorStoreService, rebacFilter, ragConfig);
+        retriever = new SecureContentRetriever(
+            vectorStoreService, rebacFilter, ragConfig, queryRewriter, arabicTextProcessor
+        );
+
+        // Default mock behavior for query rewriter - return unchanged query
+        lenient().when(queryRewriter.rewrite(anyString())).thenAnswer(invocation -> {
+            String query = invocation.getArgument(0);
+            return new QueryRewriter.RewriteResult(query, query, false, List.of());
+        });
+
+        // Default mock behavior for Arabic processor - no Arabic detected
+        lenient().when(arabicTextProcessor.containsArabic(anyString())).thenReturn(false);
     }
 
     @Test

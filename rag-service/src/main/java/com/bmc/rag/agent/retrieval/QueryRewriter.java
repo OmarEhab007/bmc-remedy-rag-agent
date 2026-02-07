@@ -1,5 +1,6 @@
 package com.bmc.rag.agent.retrieval;
 
+import com.bmc.rag.agent.util.ArabicTextProcessor;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -14,19 +15,120 @@ import java.util.regex.Pattern;
 
 /**
  * Query rewriter for improving retrieval quality (P2.3).
- * Expands abbreviations, adds synonyms, and corrects common typos.
+ * Expands abbreviations, adds synonyms, corrects common typos,
+ * and provides bilingual Arabic/English support for CST ITSM queries.
  */
 @Slf4j
 @Component
 public class QueryRewriter {
 
     private final ChatLanguageModel chatModel;
+    private final ArabicTextProcessor arabicTextProcessor;
 
     @Value("${query-rewrite.enabled:true}")
     private boolean enabled;
 
     @Value("${query-rewrite.use-llm:false}")
     private boolean useLlm;
+
+    @Value("${query-rewrite.arabic-expansion:true}")
+    private boolean arabicExpansionEnabled;
+
+    // Arabic IT terms mapped to English equivalents for bilingual search expansion
+    // These help improve retrieval for Arabic queries by adding English search terms
+    private static final Map<String, String> ARABIC_IT_TERMS = Map.ofEntries(
+        // Core ITSM concepts
+        Map.entry("تذكرة", "ticket incident request"),
+        Map.entry("طلب", "request service ticket"),
+        Map.entry("مشكلة", "problem issue incident"),
+        Map.entry("حادثة", "incident ticket issue"),
+        Map.entry("تغيير", "change request CR"),
+        Map.entry("أمر عمل", "work order WO task"),
+        Map.entry("قاعدة المعرفة", "knowledge base KB article"),
+        Map.entry("خدمة", "service request catalog"),
+
+        // Authentication & Access
+        Map.entry("إعادة تعيين", "reset password unlock"),
+        Map.entry("كلمة المرور", "password credential secret"),
+        Map.entry("صلاحيات", "permissions access rights authorization"),
+        Map.entry("دخول", "login sign-in access authentication"),
+        Map.entry("تسجيل", "login register sign-in"),
+        Map.entry("حساب", "account user profile"),
+
+        // Network & Connectivity
+        Map.entry("شبكة", "network VPN WiFi LAN connectivity"),
+        Map.entry("اتصال", "connection connectivity network link"),
+        Map.entry("انترنت", "internet web network connectivity"),
+        Map.entry("واي فاي", "WiFi wireless network"),
+
+        // Hardware & Devices
+        Map.entry("جهاز", "device computer laptop workstation"),
+        Map.entry("حاسب", "computer PC laptop desktop"),
+        Map.entry("طابعة", "printer printing document"),
+        Map.entry("شاشة", "screen monitor display"),
+        Map.entry("لوحة مفاتيح", "keyboard input device"),
+        Map.entry("فأرة", "mouse input device"),
+
+        // Software & Applications
+        Map.entry("برنامج", "software application program install"),
+        Map.entry("تطبيق", "application app software"),
+        Map.entry("تثبيت", "install setup deploy configure"),
+        Map.entry("تحديث", "update upgrade patch"),
+        Map.entry("إزالة", "uninstall remove delete"),
+
+        // Email & Communication
+        Map.entry("بريد", "email mail outlook message"),
+        Map.entry("رسالة", "message email notification"),
+        Map.entry("مرفق", "attachment file document"),
+
+        // Status & Issues
+        Map.entry("عطل", "failure error malfunction down"),
+        Map.entry("خطأ", "error issue problem failure exception"),
+        Map.entry("بطيء", "slow performance lag delay"),
+        Map.entry("توقف", "crash freeze hang stopped"),
+        Map.entry("لا يعمل", "not working down broken failure"),
+
+        // Actions
+        Map.entry("موافقة", "approval approve authorization"),
+        Map.entry("رفض", "reject decline deny"),
+        Map.entry("إلغاء", "cancel abort terminate"),
+        Map.entry("استعادة", "restore recover backup"),
+        Map.entry("نسخ احتياطي", "backup restore recovery"),
+
+        // Support & Help
+        Map.entry("دعم", "support help assistance"),
+        Map.entry("مساعدة", "help support assistance"),
+        Map.entry("استفسار", "inquiry question query"),
+
+        // Organization specific (CST/CITC)
+        Map.entry("هيئة", "commission CST organization"),
+        Map.entry("إدارة", "department administration management"),
+        Map.entry("موظف", "employee staff user"),
+        Map.entry("مدير", "manager supervisor approver")
+    );
+
+    // Arabic transliterated terms (Arabizi) - common code-switching patterns
+    private static final Map<String, String> ARABIZI_TERMS = Map.ofEntries(
+        Map.entry("ريست", "reset restore"),
+        Map.entry("باسوورد", "password credential"),
+        Map.entry("لوقن", "login sign-in"),
+        Map.entry("لوج ان", "login sign-in"),
+        Map.entry("اكسس", "access permission"),
+        Map.entry("ايميل", "email mail"),
+        Map.entry("سيرفر", "server system"),
+        Map.entry("نتورك", "network connectivity"),
+        Map.entry("سوفت وير", "software application"),
+        Map.entry("هارد وير", "hardware device"),
+        Map.entry("اب ديت", "update upgrade"),
+        Map.entry("داون لود", "download install"),
+        Map.entry("اب لود", "upload send"),
+        Map.entry("فايل", "file document"),
+        Map.entry("فولدر", "folder directory"),
+        Map.entry("لينك", "link URL"),
+        Map.entry("كليك", "click select"),
+        Map.entry("سكرين", "screen display"),
+        Map.entry("برنت", "print printer")
+    );
 
     // Common IT abbreviations and their expansions
     private static final Map<String, String> ABBREVIATIONS = Map.ofEntries(
@@ -114,8 +216,9 @@ public class QueryRewriter {
         Map.entry("compter", "computer")
     );
 
-    public QueryRewriter(ChatLanguageModel chatModel) {
+    public QueryRewriter(ChatLanguageModel chatModel, ArabicTextProcessor arabicTextProcessor) {
         this.chatModel = chatModel;
+        this.arabicTextProcessor = arabicTextProcessor;
     }
 
     /**
@@ -137,13 +240,20 @@ public class QueryRewriter {
         // Step 1: Correct typos
         rewritten = correctTypos(rewritten, modifications);
 
-        // Step 2: Expand abbreviations
+        // Step 2: Expand Arabic IT terms (bilingual support)
+        if (arabicExpansionEnabled && containsArabic(query)) {
+            rewritten = expandArabicTerms(rewritten, modifications);
+            rewritten = expandArabiziTerms(rewritten, modifications);
+            rewritten = normalizeArabicNumerals(rewritten, modifications);
+        }
+
+        // Step 3: Expand abbreviations
         rewritten = expandAbbreviations(rewritten, modifications);
 
-        // Step 3: Add synonyms for key terms
+        // Step 4: Add synonyms for key terms
         rewritten = addSynonyms(rewritten, modifications);
 
-        // Step 4: Optionally use LLM for more sophisticated rewriting
+        // Step 5: Optionally use LLM for more sophisticated rewriting
         if (useLlm && !modifications.isEmpty()) {
             rewritten = llmRewrite(query, rewritten, modifications);
         }
@@ -240,6 +350,83 @@ public class QueryRewriter {
     private String truncate(String text) {
         if (text == null) return "";
         return text.length() > 100 ? text.substring(0, 100) + "..." : text;
+    }
+
+    /**
+     * Check if query contains Arabic characters.
+     * Delegates to ArabicTextProcessor for comprehensive Unicode coverage
+     * (Arabic block, Extended-A, Presentation Forms A/B).
+     */
+    private boolean containsArabic(String text) {
+        return arabicTextProcessor != null && arabicTextProcessor.containsArabic(text);
+    }
+
+    /**
+     * Expand Arabic IT terms by adding English equivalents.
+     * This enables bilingual retrieval - Arabic queries can match English content.
+     * Note: Uses contains() for Arabic script because Arabic prefixes (ال, و, ب, etc.)
+     * attach to words without spaces - e.g. "الشبكة" (the-network) must match "شبكة" (network).
+     * False positives are unlikely since these are multi-character Arabic terms.
+     */
+    private String expandArabicTerms(String query, List<String> modifications) {
+        StringBuilder result = new StringBuilder(query);
+        Set<String> addedTerms = new HashSet<>();
+
+        for (Map.Entry<String, String> entry : ARABIC_IT_TERMS.entrySet()) {
+            String arabicTerm = entry.getKey();
+            String englishExpansion = entry.getValue();
+
+            if (query.contains(arabicTerm) && !addedTerms.contains(englishExpansion)) {
+                result.append(" ").append(englishExpansion);
+                addedTerms.add(englishExpansion);
+                modifications.add("Expanded Arabic term: " + arabicTerm + " → " + englishExpansion);
+                log.debug("Arabic expansion: '{}' → '{}'", arabicTerm, englishExpansion);
+            }
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Expand Arabizi (transliterated) terms.
+     * Handles common code-switching patterns like "ريست" → "reset".
+     * Note: Uses contains() for Arabic script because Arabic prefixes (ال, و, ب, etc.)
+     * attach to words without spaces - substring matching is the correct behavior.
+     */
+    private String expandArabiziTerms(String query, List<String> modifications) {
+        StringBuilder result = new StringBuilder(query);
+        Set<String> addedTerms = new HashSet<>();
+
+        for (Map.Entry<String, String> entry : ARABIZI_TERMS.entrySet()) {
+            String arabiziTerm = entry.getKey();
+            String expansion = entry.getValue();
+
+            if (query.contains(arabiziTerm) && !addedTerms.contains(expansion)) {
+                result.append(" ").append(expansion);
+                addedTerms.add(expansion);
+                modifications.add("Expanded Arabizi: " + arabiziTerm + " → " + expansion);
+                log.debug("Arabizi expansion: '{}' → '{}'", arabiziTerm, expansion);
+            }
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Normalize Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) to Western Arabic numerals (0123456789).
+     * Essential for ticket number parsing: "رقم التذكرة ١٢٣٤٥" → "رقم التذكرة 12345"
+     * Delegates to ArabicTextProcessor.convertArabicNumerals() to avoid duplication.
+     */
+    private String normalizeArabicNumerals(String query, List<String> modifications) {
+        if (arabicTextProcessor == null) {
+            return query;
+        }
+        String converted = arabicTextProcessor.convertArabicNumerals(query);
+        if (!converted.equals(query)) {
+            modifications.add("Normalized Arabic numerals to Western");
+            log.debug("Numeral normalization: '{}' → '{}'", query, converted);
+        }
+        return converted;
     }
 
     /**

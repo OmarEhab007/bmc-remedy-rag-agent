@@ -6,6 +6,7 @@ import com.bmc.rag.api.dto.ChatQueryMessage;
 import com.bmc.rag.api.dto.ChatResponseChunk;
 import com.bmc.rag.api.dto.ChatResponseChunk.ChunkType;
 import com.bmc.rag.api.dto.ChatResponseChunk.Citation;
+import com.bmc.rag.api.util.MdcExecutorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -117,8 +118,8 @@ public class WebSocketChatController {
             .type(ChunkType.THINKING)
             .build());
 
-        // Process asynchronously using dedicated executor
-        CompletableFuture.runAsync(() -> {
+        // Process asynchronously using dedicated executor with MDC propagation
+        CompletableFuture.runAsync(MdcExecutorService.wrapRunnable(() -> {
             try {
                 processAndStreamResponse(wsSessionId, destination, message, sessionId);
             } catch (Exception e) {
@@ -131,7 +132,7 @@ public class WebSocketChatController {
                     .isComplete(true)
                     .build());
             }
-        }, websocketExecutor);
+        }), websocketExecutor);
     }
 
     /**
@@ -149,7 +150,14 @@ public class WebSocketChatController {
             message.getUserGroups() != null ? message.getUserGroups() : Collections.emptySet()
         );
 
-        // Use streaming chat
+        // Check for agentic intent first (ticket creation, confirmation, etc.)
+        if (ragAssistantService.hasAgenticIntent(message.getText())) {
+            log.info("WebSocket: Agentic intent detected, using non-streaming path");
+            handleAgenticRequest(wsSessionId, destination, message, sessionId, userContext);
+            return;
+        }
+
+        // Use streaming chat for non-agentic requests
         ragAssistantService.chatWithStreaming(
             sessionId,
             message.getText(),
@@ -197,6 +205,55 @@ public class WebSocketChatController {
                 }
             }
         );
+    }
+
+    /**
+     * Handle agentic requests (ticket creation, confirmation, etc.) via non-streaming path.
+     * This ensures conversation history is passed to the agentic service for context extraction.
+     */
+    private void handleAgenticRequest(
+            String wsSessionId,
+            String destination,
+            ChatQueryMessage message,
+            String sessionId,
+            UserContext userContext) {
+
+        try {
+            // Use the agentic-aware chat method which passes conversation history
+            var response = ragAssistantService.chatWithAgenticSupport(
+                sessionId,
+                message.getText(),
+                message.getUserId(),
+                userContext
+            );
+
+            // Send the response as a single token block
+            sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
+                .messageId(message.getMessageId())
+                .sessionId(sessionId)
+                .token(response.getResponse())
+                .type(ChunkType.TOKEN)
+                .build());
+
+            // Send completion
+            sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
+                .messageId(message.getMessageId())
+                .sessionId(sessionId)
+                .type(ChunkType.COMPLETE)
+                .isComplete(true)
+                .citations(Collections.emptyList())
+                .build());
+
+        } catch (Exception e) {
+            log.error("Error in agentic WebSocket request: {}", e.getMessage(), e);
+            sendChunk(wsSessionId, destination, ChatResponseChunk.builder()
+                .messageId(message.getMessageId())
+                .sessionId(sessionId)
+                .type(ChunkType.ERROR)
+                .error("I encountered an error processing your request. Please try again.")
+                .isComplete(true)
+                .build());
+        }
     }
 
     /**

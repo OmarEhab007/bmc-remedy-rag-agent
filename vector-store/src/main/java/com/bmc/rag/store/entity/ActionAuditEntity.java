@@ -161,13 +161,18 @@ public class ActionAuditEntity {
             String userId,
             ActionType actionType,
             String summary) {
+        // Truncate summary to fit database column (255 chars)
+        String truncatedSummary = summary;
+        if (truncatedSummary != null && truncatedSummary.length() > 250) {
+            truncatedSummary = truncatedSummary.substring(0, 247) + "...";
+        }
         return ActionAuditEntity.builder()
             .actionId(actionId)
             .sessionId(sessionId)
             .userId(userId)
             .actionType(actionType)
             .status(ActionStatus.STAGED)
-            .summary(summary)
+            .summary(truncatedSummary)
             .stagedAt(Instant.now())
             .build();
     }

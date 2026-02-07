@@ -148,7 +148,18 @@ public class RagAssistantService {
         // Check for agentic intent
         if (hasAgenticIntent(question)) {
             log.info("Agentic intent detected, delegating to AgenticAssistantService");
-            var agenticResponse = agenticAssistantService.processMessage(sessionId, userId, question, userContext);
+
+            // Get conversation history for context extraction
+            // This allows the agentic assistant to understand references like "this issue"
+            ChatMemory memory = getOrCreateMemory(sessionId);
+            List<ChatMessage> conversationHistory = memory.messages();
+
+            var agenticResponse = agenticAssistantService.processMessage(
+                sessionId, userId, question, userContext, conversationHistory);
+
+            // Update memory with this interaction
+            memory.add(UserMessage.from(question));
+            memory.add(AiMessage.from(agenticResponse.getResponse()));
 
             return ChatResponseDto.builder()
                 .sessionId(sessionId)
@@ -351,8 +362,8 @@ public class RagAssistantService {
         // Build messages for LLM
         List<ChatMessage> messages = buildMessages(memory, question, retrievalResult);
 
-        // Track the full response for memory
-        StringBuilder fullResponse = new StringBuilder();
+        // Track the full response for memory (StringBuffer is thread-safe)
+        StringBuffer fullResponse = new StringBuffer();
 
         // Use streaming model
         CountDownLatch latch = new CountDownLatch(1);
@@ -425,17 +436,19 @@ public class RagAssistantService {
                     }
                 }
 
-                // Normal token processing - check and set truncation atomically
-                int newLength = fullResponse.length() + token.length();
-                if (newLength > MAX_RESPONSE_SIZE) {
-                    if (truncated.compareAndSet(false, true)) {
-                        log.warn("Response exceeded max size ({} chars), truncating for session {}",
-                            MAX_RESPONSE_SIZE, sessionId);
-                        tokenConsumer.accept("\n\n[Response truncated due to length]");
+                // Normal token processing - synchronized to prevent race between length check and append
+                synchronized (fullResponse) {
+                    int newLength = fullResponse.length() + token.length();
+                    if (newLength > MAX_RESPONSE_SIZE) {
+                        if (truncated.compareAndSet(false, true)) {
+                            log.warn("Response exceeded max size ({} chars), truncating for session {}",
+                                MAX_RESPONSE_SIZE, sessionId);
+                            tokenConsumer.accept("\n\n[Response truncated due to length]");
+                        }
+                        return;
                     }
-                    return;
+                    fullResponse.append(token);
                 }
-                fullResponse.append(token);
                 tokenConsumer.accept(token);
             }
 

@@ -59,7 +59,7 @@ function ChatApp() {
     try {
       downloadAsJSON(activeSession);
       toast.success(t('toast.exportedAsJSON'));
-    } catch (error) {
+    } catch {
       toast.error(t('toast.exportFailed'));
     }
   }, [activeSession, toast, t]);
@@ -76,7 +76,7 @@ function ChatApp() {
     try {
       downloadAsMarkdown(activeSession);
       toast.success(t('toast.exportedAsMarkdown'));
-    } catch (error) {
+    } catch {
       toast.error(t('toast.exportFailed'));
     }
   }, [activeSession, toast, t]);

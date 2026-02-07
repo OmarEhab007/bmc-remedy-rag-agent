@@ -66,6 +66,43 @@ public class InputValidator {
         Pattern.compile("(?i)developer\\s+mode")
     );
 
+    // Vague summary patterns that indicate LLM failed to extract actual issue from context
+    private static final List<Pattern> VAGUE_SUMMARY_PATTERNS = List.of(
+        // Generic "this/the/my issue" patterns
+        Pattern.compile("(?i)^\\s*(this|the|my|their|an?)\\s+(issue|problem|error|request|ticket)\\s*$"),
+        Pattern.compile("(?i)^\\s*with\\s+(this|the|my)?\\s*(issue|problem)\\s*$"),
+        // Vague "with X issue" patterns (e.g., "with email issue", "with login issue")
+        Pattern.compile("(?i)^\\s*with\\s+\\w+\\s+(issue|problem)\\s*$"),
+        // Generic service + issue patterns without specifics (e.g., "email issue", "login problem")
+        Pattern.compile("(?i)^\\s*(email|login|access|network|computer|system|application|app|software|password)\\s+(issue|problem|error)\\s*$"),
+        // Patterns starting with action words
+        Pattern.compile("(?i)^\\s*(create|open|new|log|raise|file|submit)\\s+(an?\\s+)?(incident|ticket|request)\\s*$"),
+        // Just the type word
+        Pattern.compile("(?i)^\\s*(issue|problem|error)\\s*$"),
+        // User reported patterns
+        Pattern.compile("(?i)^\\s*user\\s+(has|have|reported|reports|experiencing|is having)\\s+(an?\\s+)?(issue|problem)\\s*$"),
+        // Having/experiencing issue patterns
+        Pattern.compile("(?i)^\\s*(having|experiencing)\\s+(an?\\s+)?(issue|problem|trouble)\\s+(with\\s+\\w+)?\\s*$"),
+        // Help/assist patterns
+        Pattern.compile("(?i)^\\s*(help|assist|support)\\s+(with|for)\\s+(this|the)?\\s*(issue|problem|user)?\\s*$"),
+        // Need patterns without specifics
+        Pattern.compile("(?i)^\\s*(need|needs|require|requires)\\s+(help|assistance|support)\\s*$"),
+        // Incident for/about patterns without technical detail
+        Pattern.compile("(?i)^\\s*(incident|ticket)\\s+(for|about|regarding)\\s+(this|the|my|an?)\\s*(issue|problem)?\\s*$")
+    );
+
+    // Prefix for vague summary errors - used by RemedyIncidentTool for structured error detection
+    public static final String VAGUE_SUMMARY_ERROR_PREFIX = "Summary is too vague";
+
+    // Keywords that indicate a summary has technical specificity (should NOT be flagged as vague)
+    private static final List<String> TECHNICAL_SPECIFICITY_KEYWORDS = List.of(
+        "error code", "cannot", "can't", "won't", "doesn't", "failed", "failing", "crash",
+        "timeout", "connection", "unable to", "not working", "stopped", "not syncing",
+        "not loading", "not responding", "freezing", "slow", "missing", "blank",
+        "vpn", "outlook", "teams", "sharepoint", "sap", "oracle", "cisco", "citrix",
+        "down", "sync", "login", "reset", "password"
+    );
+
     /**
      * Result of input validation.
      */
@@ -90,9 +127,45 @@ public class InputValidator {
 
     /**
      * Validate and sanitize a summary field.
+     * Also checks for vague summaries that don't describe the actual technical issue.
      */
     public ValidationResult validateSummary(String input) {
+        // First, check for vague summaries that indicate LLM failed to extract context
+        if (input != null && !input.isBlank()) {
+            // Check if summary has technical specificity - if so, it's likely good
+            if (!hasTechnicalSpecificity(input)) {
+                // No technical specificity found - check against vague patterns
+                for (Pattern pattern : VAGUE_SUMMARY_PATTERNS) {
+                    if (pattern.matcher(input).matches()) {
+                        log.warn("Vague summary detected: '{}' - LLM likely failed to extract issue from context", input);
+                        return ValidationResult.invalid(List.of(
+                            VAGUE_SUMMARY_ERROR_PREFIX + ". Please provide a specific description of the technical issue " +
+                            "(e.g., 'Outlook email not syncing' instead of 'this issue')."
+                        ));
+                    }
+                }
+
+                // Additional check: if summary is too short and lacks technical detail
+                if (input.length() < 15 && !hasTechnicalSpecificity(input)) {
+                    log.warn("Short vague summary detected: '{}' - likely needs more detail", input);
+                    return ValidationResult.invalid(List.of(
+                        VAGUE_SUMMARY_ERROR_PREFIX + ". Please describe the specific technical issue " +
+                        "(e.g., 'Cannot login to Outlook with username/password')."
+                    ));
+                }
+            }
+        }
         return validateField(input, "Summary", MAX_SUMMARY_LENGTH, true);
+    }
+
+    /**
+     * Check if the summary has technical specificity (contains specific technical keywords).
+     */
+    private boolean hasTechnicalSpecificity(String input) {
+        if (input == null) return false;
+        String lower = input.toLowerCase();
+        return TECHNICAL_SPECIFICITY_KEYWORDS.stream()
+            .anyMatch(keyword -> lower.contains(keyword.toLowerCase()));
     }
 
     /**

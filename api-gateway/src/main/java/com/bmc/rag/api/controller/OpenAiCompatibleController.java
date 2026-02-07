@@ -8,6 +8,7 @@ import com.bmc.rag.api.dto.openai.*;
 import com.bmc.rag.api.service.ToolIntentDetector;
 import com.bmc.rag.api.service.ToolIntentDetector.Intent;
 import com.bmc.rag.api.service.ToolIntentDetector.IntentResult;
+import com.bmc.rag.api.util.MdcExecutorService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
@@ -23,10 +24,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.bmc.rag.agent.retrieval.SecureContentRetriever.RetrievedDocument;
 
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * OpenAI-compatible API controller for Open WebUI integration.
@@ -58,8 +61,25 @@ public class OpenAiCompatibleController {
     private final ToolIntentDetector toolIntentDetector;
     private final GuidedServiceCreator guidedServiceCreator;
 
+    @org.springframework.beans.factory.annotation.Value("${tool-server.base-url:http://localhost:${server.port:8080}}")
+    private String toolServerBaseUrl;
+
     // Thread pool for async SSE streaming
     private final ExecutorService streamingExecutor = Executors.newCachedThreadPool();
+
+    @PreDestroy
+    public void shutdown() {
+        log.info("Shutting down streaming executor...");
+        streamingExecutor.shutdown();
+        try {
+            if (!streamingExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+                streamingExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            streamingExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /**
      * Chat completions endpoint - OpenAI compatible.
@@ -149,6 +169,11 @@ public class OpenAiCompatibleController {
         if (intent.getIntent() != Intent.NONE) {
             log.info("Tool intent detected: {} with params: {}", intent.getIntent(), intent.getParameters());
 
+            // For CREATE_INCIDENT, enrich parameters from conversation history if needed
+            if (intent.getIntent() == Intent.CREATE_INCIDENT) {
+                intent = enrichCreateIncidentFromHistory(intent, request.getMessages());
+            }
+
             // Execute the tool directly and return the result as a chat response
             String toolResult = executeToolDirectly(intent, effectiveSessionId, actionIdFromHistory);
             if (toolResult != null) {
@@ -176,7 +201,7 @@ public class OpenAiCompatibleController {
      */
     private SseEmitter createErrorSseEmitter(String errorMessage) {
         SseEmitter errorEmitter = new SseEmitter(SSE_TIMEOUT);
-        streamingExecutor.submit(() -> {
+        MdcExecutorService.submit(streamingExecutor, () -> {
             try {
                 String errorJson = objectMapper.writeValueAsString(Map.of(
                     "error", Map.of("message", errorMessage, "type", "invalid_request_error")
@@ -230,7 +255,7 @@ public class OpenAiCompatibleController {
         // Generate a unique ID for this streaming response
         String completionId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
 
-        streamingExecutor.submit(() -> {
+        MdcExecutorService.submit(streamingExecutor, () -> {
             try {
                 // Send initial chunk with role
                 StreamingChatCompletionResponse firstChunk = StreamingChatCompletionResponse.builder()
@@ -381,7 +406,7 @@ public class OpenAiCompatibleController {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
         String completionId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
 
-        streamingExecutor.submit(() -> {
+        MdcExecutorService.submit(streamingExecutor, () -> {
             try {
                 // Send initial role chunk
                 StreamingChatCompletionResponse roleChunk = StreamingChatCompletionResponse.builder()
@@ -502,6 +527,187 @@ public class OpenAiCompatibleController {
     }
 
     /**
+     * Enrich CREATE_INCIDENT parameters from conversation history.
+     * When user says things like "open ticket with this issue", we need to
+     * extract the actual issue from earlier messages.
+     */
+    private IntentResult enrichCreateIncidentFromHistory(IntentResult intent, List<ChatMessage> messages) {
+        String summary = intent.getParameters().get("summary");
+        String description = intent.getParameters().get("description");
+
+        // Check if the summary is a vague reference that needs context
+        boolean needsContext = isVagueReference(summary) || isVagueReference(description);
+
+        if (!needsContext || messages == null || messages.isEmpty()) {
+            return intent;
+        }
+
+        log.info("Enriching CREATE_INCIDENT from conversation history (vague summary: '{}')", summary);
+
+        // Look for user messages that describe an issue/problem
+        String extractedIssue = null;
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if ("user".equals(msg.getRole()) && msg.getContent() != null) {
+                String content = msg.getContent();
+
+                // Skip the current message that triggered the intent
+                if (isIncidentCreationRequest(content)) {
+                    continue;
+                }
+
+                // Check if this message describes a problem
+                if (containsProblemDescription(content)) {
+                    extractedIssue = content;
+                    log.info("Found issue in conversation: '{}'",
+                        extractedIssue.length() > 50 ? extractedIssue.substring(0, 50) + "..." : extractedIssue);
+                    break;
+                }
+            }
+        }
+
+        if (extractedIssue != null) {
+            // Generate a good summary from the extracted issue
+            String newSummary = generateSummary(extractedIssue);
+            String newDescription = extractedIssue;
+
+            log.info("Enriched incident - Summary: '{}', Description: '{}'",
+                newSummary, newDescription.length() > 50 ? newDescription.substring(0, 50) + "..." : newDescription);
+
+            return IntentResult.createIncident(newSummary, newDescription);
+        }
+
+        return intent;
+    }
+
+    /**
+     * Check if the text is a vague reference that needs context.
+     */
+    private boolean isVagueReference(String text) {
+        if (text == null || text.isBlank()) return true;
+
+        String lower = text.toLowerCase().trim();
+
+        // List of vague patterns
+        return lower.matches(".*\\b(this|that|the)\\s+(issue|problem|error|ticket|incident).*") ||
+               lower.equals("this issue") ||
+               lower.equals("the issue") ||
+               lower.equals("this problem") ||
+               lower.equals("the problem") ||
+               lower.equals("with this issue") ||
+               lower.equals("with this problem") ||
+               lower.equals("new incident") ||
+               lower.equals("new ticket");
+    }
+
+    /**
+     * Check if the message is an incident creation request (not the problem description).
+     */
+    private boolean isIncidentCreationRequest(String text) {
+        if (text == null) return false;
+        String lower = text.toLowerCase();
+        return lower.matches(".*\\b(open|create|submit|raise|log|file)\\s+(an?\\s+)?(new\\s+)?(incident|ticket|issue).*") ||
+               lower.contains("with this issue") ||
+               lower.contains("for this issue") ||
+               lower.contains("for this problem");
+    }
+
+    /**
+     * Check if the message contains a problem description.
+     */
+    private boolean containsProblemDescription(String text) {
+        if (text == null || text.isBlank()) return false;
+
+        String lower = text.toLowerCase();
+
+        // Problem indicators
+        return lower.contains("not working") ||
+               lower.contains("can't") ||
+               lower.contains("cannot") ||
+               lower.contains("unable to") ||
+               lower.contains("error") ||
+               lower.contains("issue") ||
+               lower.contains("problem") ||
+               lower.contains("doesn't work") ||
+               lower.contains("won't") ||
+               lower.contains("failed") ||
+               lower.contains("failing") ||
+               lower.contains("broken") ||
+               lower.contains("stuck") ||
+               lower.contains("crash") ||
+               lower.contains("freeze") ||
+               lower.contains("slow") ||
+               lower.contains("timeout") ||
+               lower.contains("denied") ||
+               lower.contains("rejected") ||
+               lower.contains("لا يعمل") ||  // Arabic: not working
+               lower.contains("مشكلة") ||      // Arabic: problem
+               lower.contains("خطأ");          // Arabic: error
+    }
+
+    /**
+     * Generate a concise summary from an issue description.
+     */
+    private String generateSummary(String description) {
+        if (description == null || description.isBlank()) {
+            return "New incident";
+        }
+
+        // Try to extract key phrases for the summary
+        String lower = description.toLowerCase();
+
+        // Common issue patterns
+        if (lower.contains("vpn") && (lower.contains("authentication") || lower.contains("login"))) {
+            return "VPN authentication error";
+        }
+        if (lower.contains("vpn") && lower.contains("connect")) {
+            return "VPN connection issue";
+        }
+        if (lower.contains("slow") || lower.contains("performance")) {
+            if (lower.contains("workstation") || lower.contains("computer") || lower.contains("pc")) {
+                return "Workstation performance issue";
+            }
+            return "Performance issue";
+        }
+        if (lower.contains("email") && (lower.contains("not working") || lower.contains("error"))) {
+            return "Email issue";
+        }
+        if (lower.contains("network") && (lower.contains("not working") || lower.contains("connect"))) {
+            return "Network connectivity issue";
+        }
+        if (lower.contains("password") || lower.contains("login") || lower.contains("sign in")) {
+            return "Login/authentication issue";
+        }
+        if (lower.contains("printer") || lower.contains("printing")) {
+            return "Printer issue";
+        }
+        if (lower.contains("application") || lower.contains("software") || lower.contains("program")) {
+            if (lower.contains("crash") || lower.contains("freeze")) {
+                return "Application crash/freeze";
+            }
+            return "Application issue";
+        }
+
+        // Default: Use first sentence or first 80 characters
+        int dotIndex = description.indexOf('.');
+        if (dotIndex > 0 && dotIndex < 80) {
+            String summary = description.substring(0, dotIndex).trim();
+            // Capitalize first letter
+            if (!summary.isEmpty()) {
+                summary = Character.toUpperCase(summary.charAt(0)) + summary.substring(1);
+            }
+            return summary;
+        }
+
+        String summary = description.length() > 80 ? description.substring(0, 80) : description;
+        // Capitalize first letter
+        if (!summary.isEmpty()) {
+            summary = Character.toUpperCase(summary.charAt(0)) + summary.substring(1);
+        }
+        return summary;
+    }
+
+    /**
      * Execute a tool directly and return the result as formatted text.
      * This enables agentic behavior without requiring explicit tool calls.
      *
@@ -591,7 +797,7 @@ public class OpenAiCompatibleController {
         log.info("Executing create_incident tool: summary='{}', session={}", summary, sessionId);
 
         // Call the tool server endpoint internally
-        String toolServerUrl = "http://localhost:8080/tool-server/incidents";
+        String toolServerUrl = toolServerBaseUrl + "/tool-server/incidents";
 
         try {
             // Build request
@@ -666,7 +872,7 @@ public class OpenAiCompatibleController {
 
         log.info("Executing search_incidents tool: query='{}'", query);
 
-        String toolServerUrl = "http://localhost:8080/tool-server/incidents/search";
+        String toolServerUrl = toolServerBaseUrl + "/tool-server/incidents/search";
 
         try {
             org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
@@ -738,7 +944,7 @@ public class OpenAiCompatibleController {
 
         log.info("Executing get_incident tool: incidentId='{}'", incidentId);
 
-        String toolServerUrl = "http://localhost:8080/tool-server/incidents/" + incidentId;
+        String toolServerUrl = toolServerBaseUrl + "/tool-server/incidents/" + incidentId;
 
         try {
             org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
@@ -825,7 +1031,11 @@ public class OpenAiCompatibleController {
                 log.info("Using action ID from conversation history: {}", actionId);
             } else {
                 // Fall back to looking up pending actions for this session
-                String pendingUrl = "http://localhost:8080/tool-server/actions/pending?sessionId=" + sessionId;
+                String pendingUrl = org.springframework.web.util.UriComponentsBuilder
+                    .fromUriString(toolServerBaseUrl)
+                    .path("/tool-server/actions/pending")
+                    .queryParam("sessionId", sessionId)
+                    .build().toUriString();
 
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> pendingActions = restTemplate.getForObject(pendingUrl, List.class);
@@ -841,7 +1051,12 @@ public class OpenAiCompatibleController {
             }
 
             // Confirm the action
-            String confirmUrl = "http://localhost:8080/tool-server/actions/confirm?actionId=" + actionId + "&sessionId=" + sessionId;
+            String confirmUrl = org.springframework.web.util.UriComponentsBuilder
+                .fromUriString(toolServerBaseUrl)
+                .path("/tool-server/actions/confirm")
+                .queryParam("actionId", actionId)
+                .queryParam("sessionId", sessionId)
+                .build().toUriString();
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.set("X-Session-Id", sessionId);
@@ -894,7 +1109,11 @@ public class OpenAiCompatibleController {
                 log.info("Using action ID from conversation history: {}", actionId);
             } else {
                 // Fall back to looking up pending actions for this session
-                String pendingUrl = "http://localhost:8080/tool-server/actions/pending?sessionId=" + sessionId;
+                String pendingUrl = org.springframework.web.util.UriComponentsBuilder
+                    .fromUriString(toolServerBaseUrl)
+                    .path("/tool-server/actions/pending")
+                    .queryParam("sessionId", sessionId)
+                    .build().toUriString();
 
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> pendingActions = restTemplate.getForObject(pendingUrl, List.class);
@@ -910,7 +1129,12 @@ public class OpenAiCompatibleController {
             }
 
             // Cancel the action
-            String cancelUrl = "http://localhost:8080/tool-server/actions/cancel?actionId=" + actionId + "&sessionId=" + sessionId;
+            String cancelUrl = org.springframework.web.util.UriComponentsBuilder
+                .fromUriString(toolServerBaseUrl)
+                .path("/tool-server/actions/cancel")
+                .queryParam("actionId", actionId)
+                .queryParam("sessionId", sessionId)
+                .build().toUriString();
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.set("X-Session-Id", sessionId);
