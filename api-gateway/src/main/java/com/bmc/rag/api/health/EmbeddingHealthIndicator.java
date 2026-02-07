@@ -25,14 +25,15 @@ public class EmbeddingHealthIndicator implements HealthIndicator {
     @Override
     public Health health() {
         try {
-            if (embeddingService != null) {
+            float[] testEmbedding = embeddingService.embed("health check");
+            if (testEmbedding != null && testEmbedding.length > 0) {
                 return Health.up()
                         .withDetail("model", "all-minilm-l6-v2")
-                        .withDetail("dimensions", 384)
+                        .withDetail("dimensions", embeddingService.getDimension())
                         .build();
             }
             return Health.down()
-                    .withDetail("reason", "LocalEmbeddingService bean is null")
+                    .withDetail("reason", "Embedding service returned empty result")
                     .build();
         } catch (Exception e) {
             return Health.down()

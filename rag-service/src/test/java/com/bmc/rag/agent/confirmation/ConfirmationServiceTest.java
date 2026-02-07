@@ -222,7 +222,12 @@ class ConfirmationServiceTest {
 
     @Test
     void confirm_expiredAction_returnsFailure() {
-        // Given - create an action with past expiry time
+        // Given - create a service with zero timeout so actions expire immediately
+        ConfirmationService zeroTimeoutService = new ConfirmationService(
+            incidentCreator, incidentUpdater, workOrderCreator,
+            auditRepository, rateLimiter, 0
+        );
+
         IncidentCreationRequest request = IncidentCreationRequest.builder()
             .summary("Test incident")
             .description("Test description")
@@ -230,17 +235,11 @@ class ConfirmationServiceTest {
             .urgency(3)
             .build();
 
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-
-        PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
-
-        // Manually set expiry to past
-        stagedAction.setExpiresAt(Instant.now().minusSeconds(60));
+        PendingAction stagedAction = zeroTimeoutService.stageIncidentCreation(SESSION_ID, USER_ID, request);
         String actionId = stagedAction.getActionId();
 
-        // When
-        ConfirmationResult result = confirmationService.confirm(actionId, SESSION_ID, USER_ID);
+        // When - action is already expired (0-minute timeout)
+        ConfirmationResult result = zeroTimeoutService.confirm(actionId, SESSION_ID, USER_ID);
 
         // Then
         assertFalse(result.success());
@@ -283,7 +282,7 @@ class ConfirmationServiceTest {
     }
 
     @Test
-    void cancel_validAction_returnsSuccess() {
+    void cancel_validAction_returnsCancelledResult() {
         // Given
         IncidentCreationRequest request = IncidentCreationRequest.builder()
             .summary("Test incident")

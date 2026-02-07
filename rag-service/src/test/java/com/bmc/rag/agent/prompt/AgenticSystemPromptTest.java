@@ -258,9 +258,15 @@ class AgenticSystemPromptTest {
             String prompt = AgenticSystemPrompt.buildIntentClassificationPrompt(
                 "Current message", history);
 
-            // Should not include all 20 messages (limit is 6)
-            assertFalse(prompt.contains("Message 0") && prompt.contains("Message 19"),
-                "Should limit history in classification prompt");
+            // Should include only the last 6 messages (indices 14-19)
+            assertFalse(prompt.contains("Message 0"),
+                "Should not include early messages");
+            assertFalse(prompt.contains("Message 13"),
+                "Should not include messages before the last 6");
+            assertTrue(prompt.contains("Message 14"),
+                "Should include the start of the last 6 messages");
+            assertTrue(prompt.contains("Message 19"),
+                "Should include the most recent message");
         }
     }
 

@@ -26,7 +26,10 @@ CREATE TRIGGER embedding_store_arabic_search_update
     FOR EACH ROW
     EXECUTE FUNCTION embedding_store_arabic_search_trigger();
 
--- Populate existing records with Arabic text search vectors (batched to avoid lock contention)
+-- Populate existing records with Arabic text search vectors (batched to avoid lock contention).
+-- Note: This DO block runs in a single transaction (Flyway limitation). For tables with
+-- millions of rows, consider running the backfill as a separate maintenance script with
+-- explicit commits per batch instead.
 DO $$
 DECLARE
     batch_size INT := 10000;
