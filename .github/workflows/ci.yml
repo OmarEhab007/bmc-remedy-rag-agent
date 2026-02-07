@@ -34,19 +34,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Install BMC AR API stub to local Maven repo
+      - name: Install stub JARs for proprietary dependencies
         run: |
-          # BMC AR API is proprietary and not in source control.
-          # Create a minimal stub JAR so downstream modules can resolve the dependency.
+          # BMC AR API and remedy-connector require proprietary JARs not in source control.
+          # Install empty stubs so downstream modules can resolve dependencies in CI.
           mkdir -p /tmp/stub-classes
-          jar cf /tmp/arAPI-91.9.jar -C /tmp/stub-classes .
-          mvn install:install-file \
-            -Dfile=/tmp/arAPI-91.9.jar \
-            -DgroupId=com.bmc.arsys \
-            -DartifactId=arAPI \
-            -Dversion=91.9 \
-            -Dpackaging=jar \
-            -q
+          jar cf /tmp/stub.jar -C /tmp/stub-classes .
+          for GAV in "com.bmc.arsys:arAPI:91.9" "com.bmc.rag:remedy-connector:1.0.0-SNAPSHOT"; do
+            IFS=: read -r GID AID VER <<< "$GAV"
+            mvn install:install-file \
+              -Dfile=/tmp/stub.jar \
+              -DgroupId="$GID" -DartifactId="$AID" -Dversion="$VER" \
+              -Dpackaging=jar -q
+          done
 
       - name: Build and test (excluding remedy-connector)
         run: >-
