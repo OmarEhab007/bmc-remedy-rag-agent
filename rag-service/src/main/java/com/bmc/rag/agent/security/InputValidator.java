@@ -91,12 +91,16 @@ public class InputValidator {
         Pattern.compile("(?i)^\\s*(incident|ticket)\\s+(for|about|regarding)\\s+(this|the|my|an?)\\s*(issue|problem)?\\s*$")
     );
 
+    // Prefix for vague summary errors - used by RemedyIncidentTool for structured error detection
+    public static final String VAGUE_SUMMARY_ERROR_PREFIX = "Summary is too vague";
+
     // Keywords that indicate a summary has technical specificity (should NOT be flagged as vague)
     private static final List<String> TECHNICAL_SPECIFICITY_KEYWORDS = List.of(
         "error code", "cannot", "can't", "won't", "doesn't", "failed", "failing", "crash",
         "timeout", "connection", "unable to", "not working", "stopped", "not syncing",
         "not loading", "not responding", "freezing", "slow", "missing", "blank",
-        "vpn", "outlook", "teams", "sharepoint", "sap", "oracle", "cisco", "citrix"
+        "vpn", "outlook", "teams", "sharepoint", "sap", "oracle", "cisco", "citrix",
+        "down", "sync", "login", "reset", "password"
     );
 
     /**
@@ -135,17 +139,17 @@ public class InputValidator {
                     if (pattern.matcher(input).matches()) {
                         log.warn("Vague summary detected: '{}' - LLM likely failed to extract issue from context", input);
                         return ValidationResult.invalid(List.of(
-                            "Summary is too vague. Please provide a specific description of the technical issue " +
+                            VAGUE_SUMMARY_ERROR_PREFIX + ". Please provide a specific description of the technical issue " +
                             "(e.g., 'Outlook email not syncing' instead of 'this issue')."
                         ));
                     }
                 }
 
                 // Additional check: if summary is too short and lacks technical detail
-                if (input.length() < 15 && !containsTechnicalKeyword(input)) {
+                if (input.length() < 15 && !hasTechnicalSpecificity(input)) {
                     log.warn("Short vague summary detected: '{}' - likely needs more detail", input);
                     return ValidationResult.invalid(List.of(
-                        "Summary is too vague. Please describe the specific technical issue " +
+                        VAGUE_SUMMARY_ERROR_PREFIX + ". Please describe the specific technical issue " +
                         "(e.g., 'Cannot login to Outlook with username/password')."
                     ));
                 }
@@ -162,27 +166,6 @@ public class InputValidator {
         String lower = input.toLowerCase();
         return TECHNICAL_SPECIFICITY_KEYWORDS.stream()
             .anyMatch(keyword -> lower.contains(keyword.toLowerCase()));
-    }
-
-    /**
-     * Check if summary contains any technical keyword indicating real issue content.
-     */
-    private boolean containsTechnicalKeyword(String input) {
-        if (input == null) return false;
-        String lower = input.toLowerCase();
-        // Check for basic technical indicators
-        return lower.contains("error") ||
-               lower.contains("fail") ||
-               lower.contains("not ") ||
-               lower.contains("can't") ||
-               lower.contains("cannot") ||
-               lower.contains("won't") ||
-               lower.contains("sync") ||
-               lower.contains("crash") ||
-               lower.contains("slow") ||
-               lower.contains("timeout") ||
-               lower.contains("down") ||
-               lower.contains("login") && (lower.contains("fail") || lower.contains("not ") || lower.contains("unable"));
     }
 
     /**

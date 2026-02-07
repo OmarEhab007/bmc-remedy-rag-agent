@@ -324,7 +324,7 @@ agentic:
 # Tool Server Configuration
 # =============================================================================
 tool-server:
-  base-url: ${TOOL_SERVER_BASE_URL:http://localhost:${server.port:8080}}
+  base-url: "${TOOL_SERVER_BASE_URL:http://localhost:${server.port:8080}}"
 
 # =============================================================================
 # Sync Configuration

@@ -307,11 +307,19 @@ public class AgenticAssistantService {
         // Check for explicit action patterns
         for (Pattern pattern : EXPLICIT_CREATION_PATTERNS) {
             if (pattern.matcher(message).find()) {
-                // Determine if it's incident or work order
-                if (message.toLowerCase().contains("work order") ||
-                    message.toLowerCase().contains("work_order") ||
-                    message.toLowerCase().contains(" wo ") ||
-                    message.contains("أمر عمل")) {
+                String lower = message.toLowerCase();
+                boolean hasWorkOrderSignals = lower.contains("work order") ||
+                    lower.contains("work_order") ||
+                    lower.contains(" wo ") ||
+                    message.contains("أمر عمل");
+                boolean hasIncidentSignals = lower.contains("incident") ||
+                    lower.contains("حادثة") ||
+                    lower.contains("بلاغ");
+
+                if (hasWorkOrderSignals && hasIncidentSignals) {
+                    return IntentClassification.AMBIGUOUS_TYPE;
+                }
+                if (hasWorkOrderSignals) {
                     return IntentClassification.ACTION_WORKORDER;
                 }
                 return IntentClassification.ACTION_INCIDENT;

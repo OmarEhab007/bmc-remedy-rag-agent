@@ -467,7 +467,10 @@ public class AgenticSystemPrompt {
 
         for (ChatMessage msg : conversationHistory) {
             if (msg instanceof UserMessage userMsg) {
-                section.append("User: ").append(userMsg.singleText()).append("\n");
+                String text = userMsg.singleText();
+                if (text != null) {
+                    section.append("User: ").append(text).append("\n");
+                }
             } else if (msg instanceof AiMessage aiMsg) {
                 String aiText = aiMsg.text();
                 if (aiText != null && aiText.length() > 500) {
@@ -521,7 +524,10 @@ public class AgenticSystemPrompt {
             for (int i = startIdx; i < conversationHistory.size(); i++) {
                 ChatMessage msg = conversationHistory.get(i);
                 if (msg instanceof UserMessage userMsg) {
-                    prompt.append("User: ").append(userMsg.singleText()).append("\n");
+                    String text = userMsg.singleText();
+                    if (text != null) {
+                        prompt.append("User: ").append(text).append("\n");
+                    }
                 }
             }
         }

@@ -167,7 +167,7 @@ public class RemedyIncidentTool {
         if (!summaryValidation.valid()) {
             // Check if it's a vague summary error (LLM failed to extract issue)
             boolean isVagueSummaryError = summaryValidation.errors().stream()
-                .anyMatch(e -> e.toLowerCase().contains("vague"));
+                .anyMatch(e -> e.startsWith(InputValidator.VAGUE_SUMMARY_ERROR_PREFIX));
 
             if (isVagueSummaryError) {
                 log.info("Vague summary detected, attempting to extract issue from conversation history");

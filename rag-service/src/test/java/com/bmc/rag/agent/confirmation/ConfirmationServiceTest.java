@@ -163,6 +163,10 @@ class ConfirmationServiceTest {
             .urgency(3)
             .build();
 
+        // Stub save before stageIncidentCreation since it calls auditRepository.save()
+        when(auditRepository.save(any(ActionAuditEntity.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
         PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
         String actionId = stagedAction.getActionId();
 
@@ -174,9 +178,6 @@ class ConfirmationServiceTest {
         ActionAuditEntity mockAudit = new ActionAuditEntity();
         when(auditRepository.findByActionId(actionId))
             .thenReturn(Optional.of(mockAudit));
-
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         ConfirmationResult result = confirmationService.confirm(actionId, SESSION_ID, USER_ID);
@@ -264,6 +265,10 @@ class ConfirmationServiceTest {
             .urgency(3)
             .build();
 
+        // Stub save before stageIncidentCreation since it calls auditRepository.save()
+        when(auditRepository.save(any(ActionAuditEntity.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
         PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
         String actionId = stagedAction.getActionId();
 
@@ -275,9 +280,6 @@ class ConfirmationServiceTest {
         ActionAuditEntity mockAudit = new ActionAuditEntity();
         when(auditRepository.findByActionId(actionId))
             .thenReturn(Optional.of(mockAudit));
-
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         ConfirmationResult result = confirmationService.confirm(actionId, SESSION_ID, USER_ID);
@@ -300,15 +302,16 @@ class ConfirmationServiceTest {
             .urgency(3)
             .build();
 
+        // Stub save before stageIncidentCreation since it calls auditRepository.save()
+        when(auditRepository.save(any(ActionAuditEntity.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
         PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
         String actionId = stagedAction.getActionId();
 
         ActionAuditEntity mockAudit = new ActionAuditEntity();
         when(auditRepository.findByActionId(actionId))
             .thenReturn(Optional.of(mockAudit));
-
-        when(auditRepository.save(any(ActionAuditEntity.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
 
         // When
         ConfirmationResult result = confirmationService.cancel(actionId, SESSION_ID, USER_ID);
