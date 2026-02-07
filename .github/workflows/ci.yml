@@ -42,13 +42,19 @@ jobs:
             -DgroupId=com.bmc.arsys -DartifactId=arAPI -Dversion=91.9 \
             -Dpackaging=jar -q
 
-      - name: Build and test
+      - name: Compile and install modules
         run: |
-          # Build all modules with compiler errors allowed (remedy-connector model classes
-          # compile fine; only BMC-dependent service classes fail). Install to local repo.
-          ./mvnw clean install -B -Dmaven.compiler.failOnError=false -DskipTests
-          # Run tests on modules that don't require the real BMC API
-          ./mvnw test -B -pl '!remedy-connector'
+          # Compile with errors allowed (remedy-connector model classes compile,
+          # BMC-dependent service classes fail silently). Skip tests and spring-boot repackage.
+          ./mvnw clean install -B \
+            -Dmaven.compiler.failOnError=false \
+            -DskipTests \
+            -Dspring-boot.repackage.skip=true
+
+      - name: Run tests
+        run: |
+          # Run tests on all modules except remedy-connector
+          ./mvnw surefire:test -B -pl '!remedy-connector'
 
       - name: Upload test reports
         if: always()
