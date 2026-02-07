@@ -7,6 +7,7 @@ import com.bmc.rag.store.repository.SyncStateRepository;
 import com.bmc.rag.store.service.VectorStoreService;
 import com.bmc.rag.store.sync.IncrementalSyncService;
 import com.bmc.rag.store.sync.IncrementalSyncService.SyncResult;
+import com.bmc.rag.api.util.MdcExecutorService;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -96,13 +97,13 @@ public class IngestionController {
 
             // Run sync asynchronously with proper error handling and cleanup
             final String syncSourceType = sourceType;
-            CompletableFuture<SyncResult> future = CompletableFuture.supplyAsync(() -> {
+            CompletableFuture<SyncResult> future = CompletableFuture.supplyAsync(MdcExecutorService.wrapSupplier(() -> {
                 if (fullSync) {
                     return syncService.forceFullSync(syncSourceType);
                 } else {
                     return triggerSourceSync(syncSourceType);
                 }
-            }, syncExecutor).whenComplete((result, error) -> {
+            }), syncExecutor).whenComplete((result, error) -> {
                 // Always clean up the running sync entry
                 runningSyncs.remove(syncSourceType);
                 if (error != null) {
@@ -126,13 +127,13 @@ public class IngestionController {
             for (String type : List.of("Incident", "WorkOrder", "KnowledgeArticle", "ChangeRequest")) {
                 final String finalType = type;
                 final boolean finalFullSync = fullSync;
-                CompletableFuture<SyncResult> future = CompletableFuture.supplyAsync(() -> {
+                CompletableFuture<SyncResult> future = CompletableFuture.supplyAsync(MdcExecutorService.wrapSupplier(() -> {
                     if (finalFullSync) {
                         return syncService.forceFullSync(finalType);
                     } else {
                         return triggerSourceSync(finalType);
                     }
-                }, syncExecutor).whenComplete((result, error) -> {
+                }), syncExecutor).whenComplete((result, error) -> {
                     // Always clean up the running sync entry
                     runningSyncs.remove(finalType);
                     if (error != null) {

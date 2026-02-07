@@ -107,7 +107,7 @@ zai:
 # =============================================================================
 rag:
   max-results: ${RAG_MAX_RESULTS:7}
-  min-score: ${RAG_MIN_SCORE:0.5}  # Unified across all environments for consistency
+  min-score: ${RAG_MIN_SCORE:0.5}  # TODO: Validate threshold with labeled evaluation set (changed from 0.3)
   max-memory-messages: 20
   include-citations: true
   prioritize-knowledge-articles: true

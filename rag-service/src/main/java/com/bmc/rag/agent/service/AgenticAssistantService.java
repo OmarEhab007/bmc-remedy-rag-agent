@@ -285,6 +285,9 @@ public class AgenticAssistantService {
      * @return The classified intent
      */
     public IntentClassification classifyIntent(String message, List<ChatMessage> conversationHistory) {
+        if (message == null || message.isBlank()) {
+            return IntentClassification.QUESTION;
+        }
         // First, check if it's clearly a question
         for (Pattern pattern : QUESTION_PATTERNS) {
             if (pattern.matcher(message).find()) {

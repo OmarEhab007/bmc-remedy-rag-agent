@@ -8,6 +8,7 @@ import com.bmc.rag.api.dto.openai.*;
 import com.bmc.rag.api.service.ToolIntentDetector;
 import com.bmc.rag.api.service.ToolIntentDetector.Intent;
 import com.bmc.rag.api.service.ToolIntentDetector.IntentResult;
+import com.bmc.rag.api.util.MdcExecutorService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
@@ -200,7 +201,7 @@ public class OpenAiCompatibleController {
      */
     private SseEmitter createErrorSseEmitter(String errorMessage) {
         SseEmitter errorEmitter = new SseEmitter(SSE_TIMEOUT);
-        streamingExecutor.submit(() -> {
+        MdcExecutorService.submit(streamingExecutor, () -> {
             try {
                 String errorJson = objectMapper.writeValueAsString(Map.of(
                     "error", Map.of("message", errorMessage, "type", "invalid_request_error")
@@ -254,7 +255,7 @@ public class OpenAiCompatibleController {
         // Generate a unique ID for this streaming response
         String completionId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
 
-        streamingExecutor.submit(() -> {
+        MdcExecutorService.submit(streamingExecutor, () -> {
             try {
                 // Send initial chunk with role
                 StreamingChatCompletionResponse firstChunk = StreamingChatCompletionResponse.builder()
@@ -405,7 +406,7 @@ public class OpenAiCompatibleController {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
         String completionId = "chatcmpl-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
 
-        streamingExecutor.submit(() -> {
+        MdcExecutorService.submit(streamingExecutor, () -> {
             try {
                 // Send initial role chunk
                 StreamingChatCompletionResponse roleChunk = StreamingChatCompletionResponse.builder()

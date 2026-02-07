@@ -309,10 +309,12 @@ class AgenticAssistantServiceTest {
         }
 
         @Test
-        @DisplayName("Should classify null message as question")
-        void shouldClassifyNullAsQuestion() {
-            // Null handling in classification should be safe
+        @DisplayName("Should handle null and empty messages safely")
+        void shouldHandleNullAndEmptyMessages() {
+            // Null and empty handling in classification should be safe
+            assertDoesNotThrow(() -> service.classifyIntent(null, null));
             assertDoesNotThrow(() -> service.classifyIntent("", null));
+            assertDoesNotThrow(() -> service.classifyIntent("   ", null));
         }
     }
 

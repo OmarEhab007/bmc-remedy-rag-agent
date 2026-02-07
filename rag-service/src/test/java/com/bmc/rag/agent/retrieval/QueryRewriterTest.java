@@ -1,5 +1,6 @@
 package com.bmc.rag.agent.retrieval;
 
+import com.bmc.rag.agent.util.ArabicTextProcessor;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,9 +27,11 @@ class QueryRewriterTest {
 
     private QueryRewriter queryRewriter;
 
+    private final ArabicTextProcessor arabicTextProcessor = new ArabicTextProcessor();
+
     @BeforeEach
     void setUp() {
-        queryRewriter = new QueryRewriter(chatModel);
+        queryRewriter = new QueryRewriter(chatModel, arabicTextProcessor);
         // Enable query rewriting
         ReflectionTestUtils.setField(queryRewriter, "enabled", true);
         ReflectionTestUtils.setField(queryRewriter, "useLlm", false);

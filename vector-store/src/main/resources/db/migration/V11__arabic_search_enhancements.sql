@@ -26,10 +26,26 @@ CREATE TRIGGER embedding_store_arabic_search_update
     FOR EACH ROW
     EXECUTE FUNCTION embedding_store_arabic_search_trigger();
 
--- Populate existing records with Arabic text search vectors
-UPDATE embedding_store
-SET text_search_arabic = to_tsvector('simple', COALESCE(text_segment, ''))
-WHERE text_search_arabic IS NULL;
+-- Populate existing records with Arabic text search vectors (batched to avoid lock contention)
+DO $$
+DECLARE
+    batch_size INT := 10000;
+    rows_updated INT;
+BEGIN
+    LOOP
+        UPDATE embedding_store
+        SET text_search_arabic = to_tsvector('simple', COALESCE(text_segment, ''))
+        WHERE id IN (
+            SELECT id FROM embedding_store
+            WHERE text_search_arabic IS NULL
+            LIMIT batch_size
+            FOR UPDATE SKIP LOCKED
+        );
+
+        GET DIAGNOSTICS rows_updated = ROW_COUNT;
+        EXIT WHEN rows_updated = 0;
+    END LOOP;
+END $$;
 
 -- Create GIN index for Arabic full-text search
 CREATE INDEX IF NOT EXISTS idx_embedding_store_arabic_search

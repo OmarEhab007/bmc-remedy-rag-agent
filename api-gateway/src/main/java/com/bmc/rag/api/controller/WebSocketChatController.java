@@ -6,6 +6,7 @@ import com.bmc.rag.api.dto.ChatQueryMessage;
 import com.bmc.rag.api.dto.ChatResponseChunk;
 import com.bmc.rag.api.dto.ChatResponseChunk.ChunkType;
 import com.bmc.rag.api.dto.ChatResponseChunk.Citation;
+import com.bmc.rag.api.util.MdcExecutorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -117,8 +118,8 @@ public class WebSocketChatController {
             .type(ChunkType.THINKING)
             .build());
 
-        // Process asynchronously using dedicated executor
-        CompletableFuture.runAsync(() -> {
+        // Process asynchronously using dedicated executor with MDC propagation
+        CompletableFuture.runAsync(MdcExecutorService.wrapRunnable(() -> {
             try {
                 processAndStreamResponse(wsSessionId, destination, message, sessionId);
             } catch (Exception e) {
@@ -131,7 +132,7 @@ public class WebSocketChatController {
                     .isComplete(true)
                     .build());
             }
-        }, websocketExecutor);
+        }), websocketExecutor);
     }
 
     /**

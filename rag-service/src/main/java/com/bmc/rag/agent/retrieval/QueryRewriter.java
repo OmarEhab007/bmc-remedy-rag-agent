@@ -1,5 +1,6 @@
 package com.bmc.rag.agent.retrieval;
 
+import com.bmc.rag.agent.util.ArabicTextProcessor;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -22,6 +23,7 @@ import java.util.regex.Pattern;
 public class QueryRewriter {
 
     private final ChatLanguageModel chatModel;
+    private final ArabicTextProcessor arabicTextProcessor;
 
     @Value("${query-rewrite.enabled:true}")
     private boolean enabled;
@@ -214,8 +216,9 @@ public class QueryRewriter {
         Map.entry("compter", "computer")
     );
 
-    public QueryRewriter(ChatLanguageModel chatModel) {
+    public QueryRewriter(ChatLanguageModel chatModel, ArabicTextProcessor arabicTextProcessor) {
         this.chatModel = chatModel;
+        this.arabicTextProcessor = arabicTextProcessor;
     }
 
     /**
@@ -351,20 +354,19 @@ public class QueryRewriter {
 
     /**
      * Check if query contains Arabic characters.
+     * Delegates to ArabicTextProcessor for comprehensive Unicode coverage
+     * (Arabic block, Extended-A, Presentation Forms A/B).
      */
     private boolean containsArabic(String text) {
-        if (text == null || text.isEmpty()) return false;
-        for (char c : text.toCharArray()) {
-            if (c >= 0x0600 && c <= 0x06FF) {
-                return true;
-            }
-        }
-        return false;
+        return arabicTextProcessor != null && arabicTextProcessor.containsArabic(text);
     }
 
     /**
      * Expand Arabic IT terms by adding English equivalents.
      * This enables bilingual retrieval - Arabic queries can match English content.
+     * Note: Uses contains() for Arabic script because Arabic prefixes (ال, و, ب, etc.)
+     * attach to words without spaces - e.g. "الشبكة" (the-network) must match "شبكة" (network).
+     * False positives are unlikely since these are multi-character Arabic terms.
      */
     private String expandArabicTerms(String query, List<String> modifications) {
         StringBuilder result = new StringBuilder(query);
@@ -388,6 +390,8 @@ public class QueryRewriter {
     /**
      * Expand Arabizi (transliterated) terms.
      * Handles common code-switching patterns like "ريست" → "reset".
+     * Note: Uses contains() for Arabic script because Arabic prefixes (ال, و, ب, etc.)
+     * attach to words without spaces - substring matching is the correct behavior.
      */
     private String expandArabiziTerms(String query, List<String> modifications) {
         StringBuilder result = new StringBuilder(query);
