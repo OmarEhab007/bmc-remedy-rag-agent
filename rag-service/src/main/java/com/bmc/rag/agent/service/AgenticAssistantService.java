@@ -277,8 +277,9 @@ public class AgenticAssistantService {
     }
 
     /**
-     * Classify the user's intent using LLM reasoning.
-     * Used for nuanced classification when pattern matching is insufficient.
+     * Classify the user's intent using pattern-based analysis.
+     * Uses regex patterns to detect question signals, explicit action requests,
+     * and implicit action signals for intent classification.
      *
      * @param message The user's message
      * @param conversationHistory Previous messages for context

@@ -242,7 +242,6 @@ public class WebSocketChatController {
                 .type(ChunkType.COMPLETE)
                 .isComplete(true)
                 .citations(Collections.emptyList())
-                .confidenceScore(1.0)
                 .build());
 
         } catch (Exception e) {

@@ -415,31 +415,18 @@ public class QueryRewriter {
     /**
      * Normalize Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) to Western Arabic numerals (0123456789).
      * Essential for ticket number parsing: "رقم التذكرة ١٢٣٤٥" → "رقم التذكرة 12345"
+     * Delegates to ArabicTextProcessor.convertArabicNumerals() to avoid duplication.
      */
     private String normalizeArabicNumerals(String query, List<String> modifications) {
-        StringBuilder result = new StringBuilder();
-        boolean hasArabicNumerals = false;
-
-        for (char c : query.toCharArray()) {
-            if (c >= 0x0660 && c <= 0x0669) {
-                // Arabic-Indic digits (٠-٩)
-                result.append((char) (c - 0x0660 + '0'));
-                hasArabicNumerals = true;
-            } else if (c >= 0x06F0 && c <= 0x06F9) {
-                // Extended Arabic-Indic digits (Persian/Urdu)
-                result.append((char) (c - 0x06F0 + '0'));
-                hasArabicNumerals = true;
-            } else {
-                result.append(c);
-            }
+        if (arabicTextProcessor == null) {
+            return query;
         }
-
-        if (hasArabicNumerals) {
+        String converted = arabicTextProcessor.convertArabicNumerals(query);
+        if (!converted.equals(query)) {
             modifications.add("Normalized Arabic numerals to Western");
-            log.debug("Numeral normalization: '{}' → '{}'", query, result);
+            log.debug("Numeral normalization: '{}' → '{}'", query, converted);
         }
-
-        return result.toString();
+        return converted;
     }
 
     /**

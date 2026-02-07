@@ -43,6 +43,8 @@ public final class MdcExecutorService {
             Map<String, String> previous = MDC.getCopyOfContextMap();
             if (contextMap != null) {
                 MDC.setContextMap(contextMap);
+            } else {
+                MDC.clear();
             }
             try {
                 return supplier.get();
@@ -61,6 +63,8 @@ public final class MdcExecutorService {
             Map<String, String> previous = MDC.getCopyOfContextMap();
             if (contextMap != null) {
                 MDC.setContextMap(contextMap);
+            } else {
+                MDC.clear();
             }
             try {
                 task.run();

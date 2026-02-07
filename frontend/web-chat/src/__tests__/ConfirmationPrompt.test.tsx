@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfirmationPrompt } from '../components/ConfirmationPrompt'
 import type { PendingActionInfo } from '../types/chat'
@@ -182,6 +182,14 @@ describe('ConfirmationPrompt', () => {
 
     // Initial time should be around 2:05
     expect(screen.getByText(/2:0\d/)).toBeInTheDocument()
+
+    // Advance time by 60 seconds
+    act(() => {
+      vi.advanceTimersByTime(60000)
+    })
+
+    // Timer should now show around 1:05
+    expect(screen.getByText(/1:0\d/)).toBeInTheDocument()
 
     vi.useRealTimers()
   })

@@ -52,7 +52,7 @@ As an operations engineer, I need structured logs and health indicators so that 
 **Acceptance Scenarios**:
 
 1. **Given** the application is running in production mode, **When** any log event occurs, **Then** the log is emitted in structured JSON format with timestamp, level, logger, message, and correlation ID.
-2. **Given** an operations engineer queries the health endpoint, **When** the system is healthy, **Then** a comprehensive health status is returned including database connectivity, LLM availability, and memory usage.
+2. **Given** an operations engineer queries the health endpoint, **When** the system is healthy, **Then** a comprehensive health status is returned including database connectivity, LLM availability, and embedding service status.
 3. **Given** the application processes a chat request, **When** the request completes, **Then** a correlation ID is attached to all log entries for that request, enabling end-to-end tracing.
 
 ---

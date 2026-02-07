@@ -109,6 +109,7 @@ BEGIN
             ROW_NUMBER() OVER (ORDER BY ts_rank_cd(e.text_search_vector, plainto_tsquery('english', query_text)) DESC) as rank
         FROM embedding_store e
         WHERE e.text_search_vector @@ plainto_tsquery('english', query_text)
+            AND ts_rank_cd(e.text_search_vector, plainto_tsquery('english', query_text)) >= 0.01
         LIMIT max_results * 3
     ),
     arabic_text_results AS (
@@ -119,6 +120,7 @@ BEGIN
             ROW_NUMBER() OVER (ORDER BY ts_rank_cd(e.text_search_arabic, plainto_tsquery('simple', query_text)) DESC) as rank
         FROM embedding_store e
         WHERE e.text_search_arabic @@ plainto_tsquery('simple', query_text)
+            AND ts_rank_cd(e.text_search_arabic, plainto_tsquery('simple', query_text)) >= 0.01
         LIMIT max_results * 3
     ),
     combined AS (
