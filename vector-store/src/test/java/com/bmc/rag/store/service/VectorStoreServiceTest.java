@@ -312,4 +312,272 @@ class VectorStoreServiceTest {
             "12345 67890");
         assertEquals("en", result);
     }
+
+    // ========== Edge case tests for enhanced coverage ==========
+
+    @Test
+    void search_emptyResults_returnsEmptyList() {
+        // Given
+        String query = "nonexistent query";
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+        when(embeddingRepository.searchSimilar(anyString(), anyInt(), anyFloat()))
+            .thenReturn(Collections.emptyList());
+        when(embeddingRepository.count()).thenReturn(100L);
+
+        // When
+        List<SearchResult> results = vectorStoreService.search(query, 10, 0.7f);
+
+        // Then
+        assertNotNull(results);
+        assertTrue(results.isEmpty());
+        verify(embeddingRepository).count(); // Should log warning about no results
+    }
+
+    @Test
+    void search_nullEmbedding_handlesGracefully() {
+        // Given
+        String query = "test query";
+        when(embeddingService.embed(query)).thenReturn(null);
+
+        // When & Then - should throw NullPointerException when trying to format null embedding
+        assertThrows(NullPointerException.class, () -> {
+            vectorStoreService.search(query, 10, 0.5f);
+        });
+    }
+
+    @Test
+    void storeBatch_emptyList_returnsImmediately() {
+        // Given
+        List<EmbeddedChunk> emptyList = Collections.emptyList();
+
+        // When
+        vectorStoreService.storeBatch(emptyList);
+
+        // Then
+        verify(jdbcTemplate, never()).batchUpdate(anyString(), anyList(), anyInt(), any());
+    }
+
+    @Test
+    void storeBatch_nullList_returnsImmediately() {
+        // Given
+        List<EmbeddedChunk> nullList = null;
+
+        // When
+        vectorStoreService.storeBatch(nullList);
+
+        // Then
+        verify(jdbcTemplate, never()).batchUpdate(anyString(), anyList(), anyInt(), any());
+    }
+
+    @Test
+    void storeBatch_largeBatch_processesinBatches() throws Exception {
+        // Given - create 250 chunks (should be processed in 3 batches: 100, 100, 50)
+        List<EmbeddedChunk> largeList = new ArrayList<>();
+        for (int i = 0; i < 250; i++) {
+            TextChunk chunk = TextChunk.builder()
+                .chunkId("chunk-" + i)
+                .content("Content " + i)
+                .sourceType("Incident")
+                .sourceId("INC" + i)
+                .entryId("entry-" + i)
+                .chunkType(TextChunk.ChunkType.DESCRIPTION)
+                .sequenceNumber(i)
+                .metadata(Map.of())
+                .build();
+            largeList.add(new EmbeddedChunk(chunk, mockEmbedding));
+        }
+
+        // Mock ObjectMapper for metadata serialization
+        when(objectMapper.writeValueAsString(anyMap())).thenReturn("{}");
+
+        // When
+        vectorStoreService.storeBatch(largeList);
+
+        // Then - should call batchUpdate 3 times (batches of 100, 100, 50)
+        verify(jdbcTemplate, times(3)).batchUpdate(anyString(), anyList(), anyInt(), any());
+    }
+
+    @Test
+    void deleteBySourceRecord_callsRepository() {
+        // Given
+        String sourceType = "Incident";
+        String sourceId = "INC000123";
+
+        // When
+        vectorStoreService.deleteBySourceRecord(sourceType, sourceId);
+
+        // Then
+        verify(embeddingRepository).deleteBySourceTypeAndSourceId(sourceType, sourceId);
+    }
+
+    @Test
+    void deleteBySourceType_callsRepository() {
+        // Given
+        String sourceType = "Incident";
+
+        // When
+        vectorStoreService.deleteBySourceType(sourceType);
+
+        // Then
+        verify(embeddingRepository).deleteBySourceType(sourceType);
+    }
+
+    @Test
+    void searchWithGroups_emptyGroups_returnsFilteredResults() {
+        // Given
+        when(embeddingService.embed(anyString())).thenReturn(mockEmbedding);
+        when(embeddingRepository.searchSimilarWithGroups(anyString(), anyInt(), anyFloat(), eq("{}")))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        List<SearchResult> results = vectorStoreService.searchWithGroups("test", 10, 0.5f, Collections.emptyList());
+
+        // Then
+        assertNotNull(results);
+        assertTrue(results.isEmpty());
+        verify(embeddingRepository).searchSimilarWithGroups(anyString(), anyInt(), anyFloat(), eq("{}"));
+    }
+
+    @Test
+    void searchBySourceTypes_multipleTypes_callsRepository() {
+        // Given
+        List<String> sourceTypes = List.of("Incident", "WorkOrder");
+        when(embeddingService.embed(anyString())).thenReturn(mockEmbedding);
+        when(embeddingRepository.searchSimilarBySourceTypes(anyString(), anyInt(), anyFloat(), anyString()))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        List<SearchResult> results = vectorStoreService.searchBySourceTypes("test", 10, 0.5f, sourceTypes);
+
+        // Then
+        assertNotNull(results);
+        ArgumentCaptor<String> typesCaptor = ArgumentCaptor.forClass(String.class);
+        verify(embeddingRepository).searchSimilarBySourceTypes(anyString(), anyInt(), anyFloat(), typesCaptor.capture());
+        assertEquals("{\"Incident\",\"WorkOrder\"}", typesCaptor.getValue());
+    }
+
+    @Test
+    void searchByType_singleType_callsSearchBySourceTypes() {
+        // Given
+        when(embeddingService.embed(anyString())).thenReturn(mockEmbedding);
+        when(embeddingRepository.searchSimilarBySourceTypes(anyString(), anyInt(), anyFloat(), anyString()))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        List<SearchResult> results = vectorStoreService.searchByType("test", "Incident", 10, 0.8);
+
+        // Then
+        assertNotNull(results);
+        verify(embeddingRepository).searchSimilarBySourceTypes(anyString(), eq(10), eq(0.8f), eq("{\"Incident\"}"));
+    }
+
+    @Test
+    void getStatistics_returnsCorrectCounts() {
+        // Given
+        when(embeddingRepository.count()).thenReturn(1000L);
+        when(embeddingRepository.countBySourceType("Incident")).thenReturn(500L);
+        when(embeddingRepository.countBySourceType("WorkOrder")).thenReturn(300L);
+        when(embeddingRepository.countBySourceType("KnowledgeArticle")).thenReturn(150L);
+        when(embeddingRepository.countBySourceType("ChangeRequest")).thenReturn(50L);
+
+        // When
+        Map<String, Long> stats = vectorStoreService.getStatistics();
+
+        // Then
+        assertNotNull(stats);
+        assertEquals(1000L, stats.get("total"));
+        assertEquals(500L, stats.get("incidents"));
+        assertEquals(300L, stats.get("workOrders"));
+        assertEquals(150L, stats.get("knowledgeArticles"));
+        assertEquals(50L, stats.get("changeRequests"));
+    }
+
+    @Test
+    void getAllSourceIdsByType_returnsGroupedIds() {
+        // Given
+        when(embeddingRepository.findDistinctSourceIdsBySourceType("Incident"))
+            .thenReturn(List.of("INC000001", "INC000002"));
+        when(embeddingRepository.findDistinctSourceIdsBySourceType("WorkOrder"))
+            .thenReturn(List.of("WO000001"));
+        when(embeddingRepository.findDistinctSourceIdsBySourceType("KnowledgeArticle"))
+            .thenReturn(Collections.emptyList());
+        when(embeddingRepository.findDistinctSourceIdsBySourceType("ChangeRequest"))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        Map<String, Set<String>> result = vectorStoreService.getAllSourceIdsByType();
+
+        // Then
+        assertNotNull(result);
+        assertEquals(4, result.size());
+        assertEquals(2, result.get("Incident").size());
+        assertTrue(result.get("Incident").contains("INC000001"));
+        assertTrue(result.get("Incident").contains("INC000002"));
+        assertEquals(1, result.get("WorkOrder").size());
+        assertTrue(result.get("WorkOrder").contains("WO000001"));
+    }
+
+    @Test
+    void existsForSourceRecord_existingRecord_returnsTrue() {
+        // Given
+        when(embeddingRepository.findBySourceTypeAndSourceId("Incident", "INC000123"))
+            .thenReturn(List.of(new com.bmc.rag.store.entity.EmbeddingEntity()));
+
+        // When
+        boolean exists = vectorStoreService.existsForSourceRecord("Incident", "INC000123");
+
+        // Then
+        assertTrue(exists);
+    }
+
+    @Test
+    void existsForSourceRecord_nonExistingRecord_returnsFalse() {
+        // Given
+        when(embeddingRepository.findBySourceTypeAndSourceId("Incident", "INC999999"))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        boolean exists = vectorStoreService.existsForSourceRecord("Incident", "INC999999");
+
+        // Then
+        assertFalse(exists);
+    }
+
+    @Test
+    void formatMetadata_nullMetadata_returnsEmptyJson() throws Exception {
+        // Given
+        when(objectMapper.writeValueAsString(anyMap())).thenReturn("{}");
+
+        // When - test through store method
+        EmbeddedChunk chunk = new EmbeddedChunk(
+            TextChunk.builder()
+                .chunkId("test")
+                .content("test")
+                .sourceType("Incident")
+                .sourceId("INC000001")
+                .metadata(null)
+                .build(),
+            mockEmbedding
+        );
+
+        vectorStoreService.store(chunk);
+
+        // Then
+        verify(objectMapper).writeValueAsString(Map.of());
+    }
+
+    @Test
+    void searchResult_getSourceReference_formatsCorrectly() {
+        // Given
+        SearchResult result = SearchResult.builder()
+            .sourceType("Incident")
+            .sourceId("INC000123")
+            .build();
+
+        // When
+        String reference = result.getSourceReference();
+
+        // Then
+        assertEquals("Incident INC000123", reference);
+    }
 }
