@@ -12,6 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Servlet filter that assigns a unique correlation ID to every inbound request.
@@ -35,6 +36,9 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
     private static final String SESSION_ID_MDC_KEY = "sessionId";
     private static final String USER_ID_MDC_KEY = "userId";
 
+    private static final int MAX_CORRELATION_ID_LENGTH = 64;
+    private static final Pattern VALID_CORRELATION_ID_PATTERN = Pattern.compile("[a-zA-Z0-9\\-_.]+");
+
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -45,6 +49,8 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             String correlationId = request.getHeader(CORRELATION_ID_HEADER);
             if (correlationId == null || correlationId.isBlank()) {
                 correlationId = UUID.randomUUID().toString();
+            } else {
+                correlationId = sanitizeHeaderValue(correlationId);
             }
             MDC.put(CORRELATION_ID_MDC_KEY, correlationId);
             response.setHeader(CORRELATION_ID_HEADER, correlationId);
@@ -52,7 +58,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             // Populate sessionId from request header (used by chat/agentic endpoints)
             String sessionId = request.getHeader(SESSION_ID_HEADER);
             if (sessionId != null && !sessionId.isBlank()) {
-                MDC.put(SESSION_ID_MDC_KEY, sessionId);
+                MDC.put(SESSION_ID_MDC_KEY, sanitizeHeaderValue(sessionId));
             }
 
             // Populate userId from authenticated principal if available
@@ -66,5 +72,30 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             MDC.remove(SESSION_ID_MDC_KEY);
             MDC.remove(USER_ID_MDC_KEY);
         }
+    }
+
+    /**
+     * Sanitizes a client-provided header value to prevent CRLF header injection.
+     * <p>
+     * Strips control characters, validates against allowed character set
+     * {@code [a-zA-Z0-9\-_.]}, and enforces a maximum length of 64 characters.
+     * Returns a generated UUID if the sanitized value is empty or the original
+     * contained only invalid characters.
+     */
+    private String sanitizeHeaderValue(String correlationId) {
+        // Strip control characters (including CR, LF, tab, etc.)
+        String sanitized = correlationId.replaceAll("[\\p{Cntrl}]", "");
+
+        // Truncate to max length
+        if (sanitized.length() > MAX_CORRELATION_ID_LENGTH) {
+            sanitized = sanitized.substring(0, MAX_CORRELATION_ID_LENGTH);
+        }
+
+        // Validate against allowed pattern
+        if (sanitized.isEmpty() || !VALID_CORRELATION_ID_PATTERN.matcher(sanitized).matches()) {
+            return UUID.randomUUID().toString();
+        }
+
+        return sanitized;
     }
 }

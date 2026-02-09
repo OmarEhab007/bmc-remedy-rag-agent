@@ -236,4 +236,281 @@ class HybridSearchServiceTest {
 
         return results;
     }
+
+    // ========== Edge case tests for enhanced coverage ==========
+
+    @Test
+    void search_emptyQuery_returnsResults() {
+        // Given
+        String query = "";
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+        when(jdbcTemplate.queryForList(anyString(), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt()))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        var results = hybridSearchService.search(query, 10, 0.5f);
+
+        // Then
+        assertNotNull(results);
+        assertTrue(results.isEmpty());
+    }
+
+    @Test
+    void search_keywordOnlyScenario_usesTextScoring() {
+        // Given - mock result with high text score, low vector score
+        String query = "INC000123";
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+
+        List<Map<String, Object>> mockResults = new ArrayList<>();
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", UUID.randomUUID());
+        result.put("chunk_id", "chunk-1");
+        result.put("text_segment", "Incident INC000123");
+        result.put("source_type", "Incident");
+        result.put("source_id", "INC000123");
+        result.put("entry_id", "entry-1");
+        result.put("chunk_type", "DESCRIPTION");
+        result.put("sequence_number", 1);
+        result.put("metadata", new HashMap<String, String>());
+        result.put("vector_score", 0.3f);  // Low vector score
+        result.put("text_score", 0.95f);   // High text score
+        result.put("hybrid_score", 0.75f); // Combined via RRF
+        mockResults.add(result);
+
+        doReturn(mockResults).when(jdbcTemplate)
+            .queryForList(anyString(), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt());
+
+        // When
+        var results = hybridSearchService.search(query, 10, 0.5f);
+
+        // Then
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertEquals(0.95f, results.get(0).getTextScore(), 0.001f);
+        assertEquals(0.3f, results.get(0).getVectorScore(), 0.001f);
+    }
+
+    @Test
+    void search_semanticOnlyScenario_usesVectorScoring() {
+        // Given - mock result with high vector score, low text score
+        String query = "network connectivity problems";
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+
+        List<Map<String, Object>> mockResults = new ArrayList<>();
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", UUID.randomUUID());
+        result.put("chunk_id", "chunk-1");
+        result.put("text_segment", "VPN authentication issue");
+        result.put("source_type", "Incident");
+        result.put("source_id", "INC000123");
+        result.put("entry_id", "entry-1");
+        result.put("chunk_type", "DESCRIPTION");
+        result.put("sequence_number", 1);
+        result.put("metadata", new HashMap<String, String>());
+        result.put("vector_score", 0.92f);  // High vector score (semantic match)
+        result.put("text_score", 0.4f);     // Low text score (no keyword match)
+        result.put("hybrid_score", 0.85f);  // Combined via RRF
+        mockResults.add(result);
+
+        doReturn(mockResults).when(jdbcTemplate)
+            .queryForList(anyString(), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt());
+
+        // When
+        var results = hybridSearchService.search(query, 10, 0.5f);
+
+        // Then
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertEquals(0.92f, results.get(0).getVectorScore(), 0.001f);
+        assertEquals(0.4f, results.get(0).getTextScore(), 0.001f);
+    }
+
+    @Test
+    void search_combinedScoring_balancesBothScores() {
+        // Given - mock result with balanced scores
+        String query = "VPN connection issue";
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+
+        List<Map<String, Object>> mockResults = new ArrayList<>();
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", UUID.randomUUID());
+        result.put("chunk_id", "chunk-1");
+        result.put("text_segment", "VPN connection failure");
+        result.put("source_type", "Incident");
+        result.put("source_id", "INC000123");
+        result.put("entry_id", "entry-1");
+        result.put("chunk_type", "DESCRIPTION");
+        result.put("sequence_number", 1);
+        result.put("metadata", new HashMap<String, String>());
+        result.put("vector_score", 0.85f);  // Good semantic match
+        result.put("text_score", 0.80f);    // Good keyword match
+        result.put("hybrid_score", 0.90f);  // High combined score
+        mockResults.add(result);
+
+        doReturn(mockResults).when(jdbcTemplate)
+            .queryForList(anyString(), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt());
+
+        // When
+        var results = hybridSearchService.search(query, 10, 0.5f);
+
+        // Then
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertEquals(0.85f, results.get(0).getVectorScore(), 0.001f);
+        assertEquals(0.80f, results.get(0).getTextScore(), 0.001f);
+        assertEquals(0.90f, results.get(0).getHybridScore(), 0.001f);
+    }
+
+    @Test
+    void searchWithGroups_emptyGroups_filtersCorrectly() {
+        // Given
+        String query = "test query";
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+        when(jdbcTemplate.queryForList(anyString(), anyString(), anyString(), eq("{}"), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt()))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        var results = hybridSearchService.searchWithGroups(query, 10, 0.5f, Collections.emptyList());
+
+        // Then
+        assertNotNull(results);
+        assertTrue(results.isEmpty());
+        verify(jdbcTemplate).queryForList(anyString(), anyString(), anyString(), eq("{}"), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt());
+    }
+
+    @Test
+    void searchWithGroups_multipleGroups_formatsArrayCorrectly() {
+        // Given
+        String query = "test query";
+        List<String> groups = List.of("Network Support", "Application Support");
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+        when(jdbcTemplate.queryForList(anyString(), anyString(), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt()))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        hybridSearchService.searchWithGroups(query, 10, 0.5f, groups);
+
+        // Then
+        ArgumentCaptor<String> groupsCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).queryForList(anyString(), anyString(), anyString(), groupsCaptor.capture(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt());
+        assertEquals("{\"Network Support\",\"Application Support\"}", groupsCaptor.getValue());
+    }
+
+    @Test
+    void searchExact_findsExactMatch_returnsWithoutFallback() {
+        // Given
+        String query = "INC000123";
+        List<Map<String, Object>> exactMatches = new ArrayList<>();
+        Map<String, Object> match = new HashMap<>();
+        match.put("id", UUID.randomUUID());
+        match.put("chunk_id", "chunk-1");
+        match.put("text_segment", "Incident INC000123");
+        match.put("source_type", "Incident");
+        match.put("source_id", "INC000123");
+        match.put("entry_id", "entry-1");
+        match.put("chunk_type", "DESCRIPTION");
+        match.put("sequence_number", 1);
+        match.put("metadata", new HashMap<String, String>());
+        match.put("vector_score", 1.0f);
+        match.put("text_score", 1.0f);
+        match.put("hybrid_score", 1.0f);
+        exactMatches.add(match);
+
+        when(jdbcTemplate.queryForList(contains("ILIKE"), anyString(), anyInt()))
+            .thenReturn(exactMatches);
+
+        // When
+        var results = hybridSearchService.searchExact(query, 10);
+
+        // Then
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertEquals("INC000123", results.get(0).getSourceId());
+        verify(embeddingService, never()).embed(anyString()); // Should not fall back to hybrid search
+    }
+
+    @Test
+    void searchExact_noExactMatch_fallsBackToHybridSearch() {
+        // Given
+        String query = "nonexistent";
+        when(jdbcTemplate.queryForList(contains("ILIKE"), anyString(), anyInt()))
+            .thenReturn(Collections.emptyList());
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+        when(jdbcTemplate.queryForList(contains("hybrid_search"), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt()))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        var results = hybridSearchService.searchExact(query, 10);
+
+        // Then
+        assertNotNull(results);
+        verify(embeddingService).embed(query); // Should fall back to hybrid search
+    }
+
+    @Test
+    void search_nullMetadata_handlesGracefully() {
+        // Given
+        String query = "test";
+        when(embeddingService.embed(query)).thenReturn(mockEmbedding);
+
+        List<Map<String, Object>> mockResults = new ArrayList<>();
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", UUID.randomUUID());
+        result.put("chunk_id", "chunk-1");
+        result.put("text_segment", "test content");
+        result.put("source_type", "Incident");
+        result.put("source_id", "INC000123");
+        result.put("entry_id", "entry-1");
+        result.put("chunk_type", "DESCRIPTION");
+        result.put("sequence_number", 1);
+        result.put("metadata", null);  // Null metadata
+        result.put("vector_score", 0.8f);
+        result.put("text_score", 0.7f);
+        result.put("hybrid_score", 0.75f);
+        mockResults.add(result);
+
+        doReturn(mockResults).when(jdbcTemplate)
+            .queryForList(anyString(), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt());
+
+        // When
+        var results = hybridSearchService.search(query, 10, 0.5f);
+
+        // Then
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertNotNull(results.get(0).getMetadata());
+        assertTrue(results.get(0).getMetadata().isEmpty());
+    }
+
+    @Test
+    void formatEmbedding_correctlyFormatsFloatArray() {
+        // Given
+        float[] embedding = new float[]{0.1f, 0.2f, 0.3f};
+        when(embeddingService.embed(anyString())).thenReturn(embedding);
+        when(jdbcTemplate.queryForList(anyString(), anyString(), anyString(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt()))
+            .thenReturn(Collections.emptyList());
+
+        // When
+        hybridSearchService.search("test", 10, 0.5f);
+
+        // Then
+        ArgumentCaptor<String> embeddingCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).queryForList(anyString(), anyString(), embeddingCaptor.capture(), anyInt(), anyFloat(), anyFloat(), anyFloat(), anyInt());
+        assertEquals("[0.1,0.2,0.3]", embeddingCaptor.getValue());
+    }
+
+    @Test
+    void hybridSearchResult_getSourceReference_formatsCorrectly() {
+        // Given
+        var result = HybridSearchService.HybridSearchResult.builder()
+            .sourceType("WorkOrder")
+            .sourceId("WO000456")
+            .build();
+
+        // When
+        String reference = result.getSourceReference();
+
+        // Then
+        assertEquals("WorkOrder WO000456", reference);
+    }
 }

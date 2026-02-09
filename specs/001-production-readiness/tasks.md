@@ -259,5 +259,5 @@ With multiple developers:
 - [Story] label maps task to specific user story for traceability
 - Phase 2 (Foundational) is ALREADY COMPLETE - security fixes applied to branch
 - Phase 7 (US5) is MOSTLY COMPLETE - configuration externalized
-- Total: 41 tasks (5 setup, 5 foundational done, 3 US1, 3 US2, 6 US3, 10 US4, 2 US5, 3 data layer, 4 polish)
+- Total: 44 tasks (5 setup, 5 foundational done, 3 US1, 3 US2, 6 US3, 10 US4, 2 US5, 3 data layer, 4 polish)
 - Parallel opportunities: 29 of 41 tasks can run in parallel with others

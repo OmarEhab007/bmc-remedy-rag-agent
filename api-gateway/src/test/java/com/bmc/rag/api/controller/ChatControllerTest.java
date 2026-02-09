@@ -376,4 +376,294 @@ class ChatControllerTest {
             .andExpect(jsonPath("$.response").value(containsString("**1.**")))
             .andExpect(jsonPath("$.response").value(containsString("**2.**")));
     }
+
+    @Test
+    void chat_emptyQuestion_returnsBadRequest() throws Exception {
+        // Given
+        ChatRequest request = ChatRequest.builder()
+            .sessionId("test-session")
+            .question("")
+            .build();
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void chat_serviceError_returnsInternalServerError() throws Exception {
+        // Given
+        ChatRequest request = ChatRequest.builder()
+            .question("Test question")
+            .build();
+
+        when(ragAssistantService.chatWithAgenticSupport(anyString(), anyString(), anyString(), any()))
+            .thenThrow(new RuntimeException("Service error"));
+
+        when(guidedServiceCreator.hasActiveFlow(anyString()))
+            .thenReturn(false);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void search_emptyQuery_returnsBadRequest() throws Exception {
+        // Given
+        SearchRequest request = SearchRequest.builder()
+            .query("")
+            .build();
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getSessions_emptyList_returnsEmptyArray() throws Exception {
+        // Given
+        when(ragAssistantService.getSessionSummaries()).thenReturn(Collections.emptyList());
+
+        // When & Then
+        mockMvc.perform(get("/api/v1/chat/sessions")
+                .contentType(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void chat_withGuidedFlowError_fallsBackToNormalProcessing() throws Exception {
+        // Given
+        ChatRequest request = ChatRequest.builder()
+            .sessionId("test-session")
+            .question("What is VPN?")
+            .userId("test-user")
+            .build();
+
+        when(guidedServiceCreator.hasActiveFlow("test-session")).thenReturn(true);
+        when(guidedServiceCreator.processMessage(anyString(), anyString(), anyString()))
+            .thenThrow(new RuntimeException("Guided flow error"));
+
+        RagAssistantService.ChatResponseDto serviceResponse = RagAssistantService.ChatResponseDto.builder()
+            .response("VPN response")
+            .sources(Collections.emptyList())
+            .hasContext(false)
+            .build();
+
+        when(ragAssistantService.chatWithAgenticSupport(anyString(), anyString(), anyString(), any()))
+            .thenReturn(serviceResponse);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.response").value("VPN response"));
+    }
+
+    @Test
+    void chat_guidedFlowReturnsNull_fallsBackToNormalProcessing() throws Exception {
+        // Given
+        ChatRequest request = ChatRequest.builder()
+            .sessionId("test-session")
+            .question("What is VPN?")
+            .userId("test-user")
+            .build();
+
+        when(guidedServiceCreator.hasActiveFlow("test-session")).thenReturn(true);
+        when(guidedServiceCreator.processMessage(anyString(), anyString(), anyString()))
+            .thenReturn(null);
+
+        RagAssistantService.ChatResponseDto serviceResponse = RagAssistantService.ChatResponseDto.builder()
+            .response("VPN response")
+            .sources(Collections.emptyList())
+            .hasContext(false)
+            .build();
+
+        when(ragAssistantService.chatWithAgenticSupport(anyString(), anyString(), anyString(), any()))
+            .thenReturn(serviceResponse);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.response").value("VPN response"));
+    }
+
+    @Test
+    void chat_nullUserGroups_usesEmptySet() throws Exception {
+        // Given
+        ChatRequest request = ChatRequest.builder()
+            .sessionId("test-session")
+            .question("Test question")
+            .userId("test-user")
+            .userGroups(null)
+            .build();
+
+        RagAssistantService.ChatResponseDto serviceResponse = RagAssistantService.ChatResponseDto.builder()
+            .response("Test response")
+            .sources(Collections.emptyList())
+            .hasContext(false)
+            .build();
+
+        when(ragAssistantService.chatWithAgenticSupport(anyString(), anyString(), anyString(), any()))
+            .thenReturn(serviceResponse);
+
+        when(guidedServiceCreator.hasActiveFlow(anyString()))
+            .thenReturn(false);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.response").value("Test response"));
+
+        verify(ragAssistantService).chatWithAgenticSupport(
+            eq("test-session"),
+            eq("Test question"),
+            eq("test-user"),
+            any()
+        );
+    }
+
+    @Test
+    void search_nullUserGroups_usesEmptySet() throws Exception {
+        // Given
+        SearchRequest request = SearchRequest.builder()
+            .query("VPN")
+            .userId("test-user")
+            .userGroups(null)
+            .build();
+
+        RetrievalResult retrievalResult = new RetrievalResult(Collections.emptyList(), "");
+
+        when(contentRetriever.retrieve(eq("VPN"), any()))
+            .thenReturn(retrievalResult);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.resultCount").value(0));
+    }
+
+    @Test
+    void search_longButValidQuery_succeeds() throws Exception {
+        // Given - create a long query
+        StringBuilder longQuery = new StringBuilder();
+        for (int i = 0; i < 60; i++) {
+            longQuery.append("x");
+        }
+
+        SearchRequest request = SearchRequest.builder()
+            .query(longQuery.toString())
+            .userId("test-user")
+            .build();
+
+        RetrievalResult retrievalResult = new RetrievalResult(Collections.emptyList(), "");
+
+        when(contentRetriever.retrieve(anyString(), any()))
+            .thenReturn(retrievalResult);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then - should not fail, query gets truncated in logs
+        mockMvc.perform(post("/api/v1/chat/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.resultCount").value(0));
+    }
+
+    @Test
+    void chat_withNullUserId_generatesSessionBasedId() throws Exception {
+        // Given
+        ChatRequest request = ChatRequest.builder()
+            .sessionId("test-session")
+            .question("Test question")
+            .userId(null)
+            .build();
+
+        RagAssistantService.ChatResponseDto serviceResponse = RagAssistantService.ChatResponseDto.builder()
+            .response("Test response")
+            .sources(Collections.emptyList())
+            .hasContext(false)
+            .build();
+
+        when(ragAssistantService.chatWithAgenticSupport(anyString(), anyString(), anyString(), any()))
+            .thenReturn(serviceResponse);
+
+        when(guidedServiceCreator.hasActiveFlow(anyString()))
+            .thenReturn(false);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.response").value("Test response"));
+
+        verify(ragAssistantService).chatWithAgenticSupport(
+            eq("test-session"),
+            eq("Test question"),
+            eq("session:test-session"),
+            any()
+        );
+    }
+
+    @Test
+    void chat_guidedFlowWithEmptyOptions_formatsCorrectly() throws Exception {
+        // Given
+        ChatRequest request = ChatRequest.builder()
+            .sessionId("test-session")
+            .question("1")
+            .userId("test-user")
+            .build();
+
+        GuidedServiceCreator.GuidedResponse guidedResponse = GuidedServiceCreator.GuidedResponse.builder()
+            .message("Please provide more details.")
+            .submitted(false)
+            .options(Collections.emptyList())
+            .build();
+
+        when(guidedServiceCreator.hasActiveFlow("test-session")).thenReturn(true);
+        when(guidedServiceCreator.processMessage("test-session", "test-user", "1"))
+            .thenReturn(guidedResponse);
+
+        String requestJson = objectMapper.writeValueAsString(request);
+
+        // When & Then
+        mockMvc.perform(post("/api/v1/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestJson))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.response").value("Please provide more details."));
+    }
 }

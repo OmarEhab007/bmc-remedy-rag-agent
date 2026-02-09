@@ -448,8 +448,8 @@ public class RagAssistantService {
                         return;
                     }
                     fullResponse.append(token);
+                    tokenConsumer.accept(token);
                 }
-                tokenConsumer.accept(token);
             }
 
             @Override

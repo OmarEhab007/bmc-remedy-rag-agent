@@ -129,6 +129,252 @@ class ReBACFilterTest {
             .allMatch(r -> r.getScore() == 0.9f));
     }
 
+    @Test
+    @DisplayName("filterAndPrioritize without prioritization")
+    void testFilterAndPrioritizeWithoutPrioritization() {
+        List<SearchResult> results = List.of(
+            createSearchResult("1", "Service Desk"),
+            createSearchResult("2", "Network Team")
+        );
+
+        Set<String> userGroups = Set.of("Service Desk");
+
+        List<SearchResult> filtered = rebacFilter.filterAndPrioritize(results, userGroups, false);
+
+        assertEquals(1, filtered.size());
+        assertEquals("1", filtered.get(0).getChunkId());
+    }
+
+    @Test
+    @DisplayName("filterAndPrioritize with knowledge article prioritization")
+    void testFilterAndPrioritizeWithKnowledgeArticles() {
+        SearchResult incident = SearchResult.builder()
+            .chunkId("1")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .textSegment("content")
+            .score(0.9f)
+            .build();
+
+        SearchResult kb = SearchResult.builder()
+            .chunkId("2")
+            .sourceType("KnowledgeArticle")
+            .sourceId("KB001")
+            .textSegment("content")
+            .score(0.7f)
+            .build();
+
+        List<SearchResult> results = List.of(incident, kb);
+
+        List<SearchResult> filtered = rebacFilter.filterAndPrioritize(
+            results, Collections.emptySet(), true);
+
+        assertEquals(2, filtered.size());
+        // Knowledge article should be first
+        assertEquals("KnowledgeArticle", filtered.get(0).getSourceType());
+        assertEquals("Incident", filtered.get(1).getSourceType());
+    }
+
+    @Test
+    @DisplayName("filterAndPrioritize with empty results")
+    void testFilterAndPrioritizeEmptyResults() {
+        List<SearchResult> filtered = rebacFilter.filterAndPrioritize(
+            Collections.emptyList(), Set.of("Admin"), true);
+
+        assertTrue(filtered.isEmpty());
+    }
+
+    @Test
+    @DisplayName("prioritizeHighValueChunks prioritizes resolution chunks")
+    void testPrioritizeHighValueChunksResolution() {
+        SearchResult normal = SearchResult.builder()
+            .chunkId("1")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .chunkType("SUMMARY")
+            .textSegment("content")
+            .score(0.8f)
+            .build();
+
+        SearchResult resolution = SearchResult.builder()
+            .chunkId("2")
+            .sourceType("Incident")
+            .sourceId("INC002")
+            .chunkType("RESOLUTION")
+            .textSegment("resolution content")
+            .score(0.7f)
+            .build();
+
+        List<SearchResult> results = List.of(normal, resolution);
+        List<SearchResult> prioritized = rebacFilter.prioritizeHighValueChunks(results);
+
+        assertEquals(2, prioritized.size());
+        // Resolution should be first despite lower score
+        assertEquals("RESOLUTION", prioritized.get(0).getChunkType());
+        assertEquals("SUMMARY", prioritized.get(1).getChunkType());
+    }
+
+    @Test
+    @DisplayName("prioritizeHighValueChunks handles implementation and article content")
+    void testPrioritizeHighValueChunksMultipleTypes() {
+        SearchResult normal = SearchResult.builder()
+            .chunkId("1")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .chunkType("NOTES")
+            .score(0.9f)
+            .build();
+
+        SearchResult implementation = SearchResult.builder()
+            .chunkId("2")
+            .sourceType("Change")
+            .sourceId("CHG001")
+            .chunkType("IMPLEMENTATION")
+            .score(0.8f)
+            .build();
+
+        SearchResult article = SearchResult.builder()
+            .chunkId("3")
+            .sourceType("KnowledgeArticle")
+            .sourceId("KB001")
+            .chunkType("ARTICLE_CONTENT")
+            .score(0.7f)
+            .build();
+
+        List<SearchResult> results = List.of(normal, implementation, article);
+        List<SearchResult> prioritized = rebacFilter.prioritizeHighValueChunks(results);
+
+        assertEquals(3, prioritized.size());
+        // High-value chunks first
+        assertTrue(prioritized.get(0).getChunkType().equals("IMPLEMENTATION") ||
+                   prioritized.get(0).getChunkType().equals("ARTICLE_CONTENT"));
+        assertEquals("NOTES", prioritized.get(2).getChunkType());
+    }
+
+    @Test
+    @DisplayName("prioritizeHighValueChunks handles null chunk types")
+    void testPrioritizeHighValueChunksNullChunkType() {
+        SearchResult withNull = SearchResult.builder()
+            .chunkId("1")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .chunkType(null)
+            .score(0.8f)
+            .build();
+
+        List<SearchResult> results = List.of(withNull);
+        List<SearchResult> prioritized = rebacFilter.prioritizeHighValueChunks(results);
+
+        assertEquals(1, prioritized.size());
+        assertNull(prioritized.get(0).getChunkType());
+    }
+
+    @Test
+    @DisplayName("prioritizeHighValueChunks handles single result")
+    void testPrioritizeHighValueChunksSingleResult() {
+        SearchResult single = SearchResult.builder()
+            .chunkId("1")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .score(0.8f)
+            .build();
+
+        List<SearchResult> results = List.of(single);
+        List<SearchResult> prioritized = rebacFilter.prioritizeHighValueChunks(results);
+
+        assertEquals(results, prioritized);
+    }
+
+    @Test
+    @DisplayName("prioritizeHighValueChunks handles null input")
+    void testPrioritizeHighValueChunksNullInput() {
+        List<SearchResult> prioritized = rebacFilter.prioritizeHighValueChunks(null);
+        assertNull(prioritized);
+    }
+
+    @Test
+    @DisplayName("deduplicateBySource handles null and empty")
+    void testDeduplicateBySourceHandlesNullAndEmpty() {
+        assertNull(rebacFilter.deduplicateBySource(null));
+        assertTrue(rebacFilter.deduplicateBySource(Collections.emptyList()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("applyAllFilters combines all operations")
+    void testApplyAllFilters() {
+        SearchResult kb1 = SearchResult.builder()
+            .chunkId("1")
+            .sourceType("KnowledgeArticle")
+            .sourceId("KB001")
+            .chunkType("ARTICLE_CONTENT")
+            .score(0.9f)
+            .metadata(Map.of("assigned_group", "Service Desk"))
+            .build();
+
+        SearchResult incident1 = SearchResult.builder()
+            .chunkId("2")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .chunkType("SUMMARY")
+            .score(0.8f)
+            .metadata(Map.of("assigned_group", "Service Desk"))
+            .build();
+
+        SearchResult incident2 = SearchResult.builder()
+            .chunkId("3")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .chunkType("RESOLUTION")
+            .score(0.7f)
+            .metadata(Map.of("assigned_group", "Service Desk"))
+            .build();
+
+        List<SearchResult> results = List.of(kb1, incident1, incident2);
+
+        List<SearchResult> filtered = rebacFilter.applyAllFilters(
+            results,
+            Set.of("Service Desk"),
+            true,   // prioritize knowledge
+            true    // deduplicate
+        );
+
+        // Should have KB article first, then only one incident (deduplicated)
+        assertTrue(filtered.size() <= 2);
+        assertEquals("KnowledgeArticle", filtered.get(0).getSourceType());
+    }
+
+    @Test
+    @DisplayName("applyAllFilters without deduplication")
+    void testApplyAllFiltersWithoutDedup() {
+        SearchResult r1 = SearchResult.builder()
+            .chunkId("1")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .chunkType("SUMMARY")
+            .score(0.8f)
+            .build();
+
+        SearchResult r2 = SearchResult.builder()
+            .chunkId("2")
+            .sourceType("Incident")
+            .sourceId("INC001")
+            .chunkType("RESOLUTION")
+            .score(0.7f)
+            .build();
+
+        List<SearchResult> results = List.of(r1, r2);
+
+        List<SearchResult> filtered = rebacFilter.applyAllFilters(
+            results,
+            Collections.emptySet(),
+            false,  // no prioritization
+            false   // no deduplication
+        );
+
+        // Both results should remain
+        assertEquals(2, filtered.size());
+    }
+
     private SearchResult createSearchResult(String chunkId, String assignedGroup) {
         Map<String, String> metadata = new HashMap<>();
         if (assignedGroup != null) {

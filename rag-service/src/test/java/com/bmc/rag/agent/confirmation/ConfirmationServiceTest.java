@@ -447,4 +447,154 @@ class ConfirmationServiceTest {
         assertTrue(stats.size() >= 1);
         assertEquals(0, stats.hitCount()); // No cache hits yet
     }
+
+    @Test
+    void confirm_workOrderCreation_executesSuccessfully() {
+        // Given
+        WorkOrderCreationRequest request = WorkOrderCreationRequest.builder()
+            .summary("Install software")
+            .description("Install Adobe Acrobat")
+            .workOrderType(0)
+            .priority(2)
+            .build();
+
+        PendingAction stagedAction = confirmationService.stageWorkOrderCreation(SESSION_ID, USER_ID, request);
+        String actionId = stagedAction.getActionId();
+
+        CreationResult creationResult = CreationResult.success("wo-entry-1", "WO000123", "WOI:WorkOrder");
+        when(workOrderCreator.createWorkOrder(any(WorkOrderCreationRequest.class)))
+            .thenReturn(creationResult);
+
+        ActionAuditEntity mockAudit = new ActionAuditEntity();
+        when(auditRepository.findByActionId(actionId))
+            .thenReturn(Optional.of(mockAudit));
+
+        // When
+        ConfirmationResult result = confirmationService.confirm(actionId, SESSION_ID, USER_ID);
+
+        // Then
+        assertTrue(result.success());
+        assertEquals("WO000123", result.recordId());
+        verify(workOrderCreator).createWorkOrder(request);
+        verify(rateLimiter).recordAction(USER_ID);
+    }
+
+    @Test
+    void confirm_incidentUpdate_executesSuccessfully() {
+        // Given
+        IncidentUpdateRequest request = IncidentUpdateRequest.builder()
+            .incidentNumber("INC000123")
+            .status(4)
+            .resolution("Fixed by restarting VPN service")
+            .build();
+
+        PendingAction stagedAction = confirmationService.stageIncidentUpdate(SESSION_ID, USER_ID, request);
+        String actionId = stagedAction.getActionId();
+
+        CreationResult creationResult = CreationResult.success("entry-1", "INC000123", "HPD:Help Desk");
+        when(incidentUpdater.updateIncident(any(IncidentUpdateRequest.class)))
+            .thenReturn(creationResult);
+
+        ActionAuditEntity mockAudit = new ActionAuditEntity();
+        when(auditRepository.findByActionId(actionId))
+            .thenReturn(Optional.of(mockAudit));
+
+        // When
+        ConfirmationResult result = confirmationService.confirm(actionId, SESSION_ID, USER_ID);
+
+        // Then
+        assertTrue(result.success());
+        assertEquals("INC000123", result.recordId());
+        verify(incidentUpdater).updateIncident(request);
+        verify(rateLimiter).recordAction(USER_ID);
+    }
+
+    @Test
+    void confirm_executionThrowsException_returnsFailure() {
+        // Given
+        IncidentCreationRequest request = IncidentCreationRequest.builder()
+            .summary("Test incident")
+            .description("Test description")
+            .impact(3)
+            .urgency(3)
+            .build();
+
+        PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
+        String actionId = stagedAction.getActionId();
+
+        when(incidentCreator.createIncident(any(IncidentCreationRequest.class)))
+            .thenThrow(new RuntimeException("Database connection lost"));
+
+        ActionAuditEntity mockAudit = new ActionAuditEntity();
+        when(auditRepository.findByActionId(actionId))
+            .thenReturn(Optional.of(mockAudit));
+
+        // When
+        ConfirmationResult result = confirmationService.confirm(actionId, SESSION_ID, USER_ID);
+
+        // Then
+        assertFalse(result.success());
+        assertTrue(result.message().contains("Database connection lost"));
+        verify(rateLimiter, never()).recordAction(any());
+    }
+
+    @Test
+    void cancel_alreadyConfirmedAction_returnsFailure() {
+        // Given
+        IncidentCreationRequest request = IncidentCreationRequest.builder()
+            .summary("Test incident")
+            .description("Test description")
+            .impact(3)
+            .urgency(3)
+            .build();
+
+        PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
+        String actionId = stagedAction.getActionId();
+
+        // Confirm the action first
+        CreationResult creationResult = CreationResult.success("entry-1", "INC000999", "HPD:Help Desk");
+        when(incidentCreator.createIncident(any(IncidentCreationRequest.class)))
+            .thenReturn(creationResult);
+        when(auditRepository.findByActionId(actionId))
+            .thenReturn(Optional.of(new ActionAuditEntity()));
+
+        confirmationService.confirm(actionId, SESSION_ID, USER_ID);
+
+        // When - try to cancel an already confirmed action
+        ConfirmationResult cancelResult = confirmationService.cancel(actionId, SESSION_ID, USER_ID);
+
+        // Then
+        assertFalse(cancelResult.cancelled());
+        assertTrue(cancelResult.message().contains("cannot be cancelled"));
+    }
+
+    @Test
+    void confirm_alreadyConfirmedAction_notConfirmable() {
+        // Given
+        IncidentCreationRequest request = IncidentCreationRequest.builder()
+            .summary("Test incident")
+            .description("Test description")
+            .impact(3)
+            .urgency(3)
+            .build();
+
+        PendingAction stagedAction = confirmationService.stageIncidentCreation(SESSION_ID, USER_ID, request);
+        String actionId = stagedAction.getActionId();
+
+        // Confirm the action first
+        CreationResult creationResult = CreationResult.success("entry-1", "INC001", "HPD:Help Desk");
+        when(incidentCreator.createIncident(any(IncidentCreationRequest.class)))
+            .thenReturn(creationResult);
+        when(auditRepository.findByActionId(actionId))
+            .thenReturn(Optional.of(new ActionAuditEntity()));
+
+        confirmationService.confirm(actionId, SESSION_ID, USER_ID);
+
+        // When - try to confirm again
+        ConfirmationResult secondResult = confirmationService.confirm(actionId, SESSION_ID, USER_ID);
+
+        // Then
+        assertFalse(secondResult.success());
+        assertTrue(secondResult.message().contains("no longer pending"));
+    }
 }

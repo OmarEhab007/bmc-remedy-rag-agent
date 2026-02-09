@@ -12,6 +12,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for QueryRewriter.
@@ -414,6 +416,86 @@ class QueryRewriterTest {
             var result = queryRewriter.rewrite(query);
 
             assertThat(result.getQueryForSearch()).isEqualTo(result.rewrittenQuery());
+        }
+    }
+
+    @Nested
+    @DisplayName("LLM Rewrite Tests")
+    class LlmRewriteTests {
+
+        @Test
+        @DisplayName("Should use LLM rewrite when useLlm=true and modifications exist")
+        void llmRewrite_whenEnabled_callsLlm() {
+            ReflectionTestUtils.setField(queryRewriter, "useLlm", true);
+
+            // Mock the LLM to return a rewritten query
+            dev.langchain4j.model.chat.response.ChatResponse mockResponse =
+                    dev.langchain4j.model.chat.response.ChatResponse.builder()
+                            .aiMessage(dev.langchain4j.data.message.AiMessage.from("optimized VPN connection query"))
+                            .build();
+            when(chatModel.chat(any(dev.langchain4j.model.chat.request.ChatRequest.class)))
+                    .thenReturn(mockResponse);
+
+            // Use a query that triggers modifications (typo + abbreviation)
+            String query = "cannot connect to vpn conection issue";
+            var result = queryRewriter.rewrite(query);
+
+            assertThat(result.wasModified()).isTrue();
+            assertThat(result.modifications()).anyMatch(m -> m.contains("LLM enhanced"));
+            assertThat(result.rewrittenQuery()).isEqualTo("optimized VPN connection query");
+        }
+
+        @Test
+        @DisplayName("Should fallback to expanded when LLM fails")
+        void llmRewrite_whenLlmFails_fallsBack() {
+            ReflectionTestUtils.setField(queryRewriter, "useLlm", true);
+
+            // Mock LLM failure
+            when(chatModel.chat(any(dev.langchain4j.model.chat.request.ChatRequest.class)))
+                    .thenThrow(new RuntimeException("LLM unavailable"));
+
+            // Use a query that triggers modifications
+            String query = "outlok not working";
+            var result = queryRewriter.rewrite(query);
+
+            assertThat(result.wasModified()).isTrue();
+            // Should contain the typo-corrected version, not throw
+            assertThat(result.rewrittenQuery()).contains("outlook");
+        }
+
+        @Test
+        @DisplayName("Should NOT call LLM when useLlm=true but no modifications")
+        void llmRewrite_noModifications_skipsLlm() {
+            ReflectionTestUtils.setField(queryRewriter, "useLlm", true);
+
+            // Use a query with no modifications (no typos, no abbreviations, no synonyms)
+            String query = "general information about the company";
+            var result = queryRewriter.rewrite(query);
+
+            // No LLM call since no modifications were made
+            verify(chatModel, never()).chat(any(dev.langchain4j.model.chat.request.ChatRequest.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("Null ArabicTextProcessor Tests")
+    class NullArabicProcessorTests {
+
+        @Test
+        @DisplayName("Should handle null arabicTextProcessor gracefully")
+        void nullProcessor_arabicQuery_noExpansion() {
+            // Create a rewriter with null arabicTextProcessor
+            QueryRewriter rewriterWithNullProcessor = new QueryRewriter(chatModel, null);
+            ReflectionTestUtils.setField(rewriterWithNullProcessor, "enabled", true);
+            ReflectionTestUtils.setField(rewriterWithNullProcessor, "useLlm", false);
+            ReflectionTestUtils.setField(rewriterWithNullProcessor, "arabicExpansionEnabled", true);
+
+            // Arabic query should not cause NPE
+            String query = "أريد فتح تذكرة جديدة";
+            var result = rewriterWithNullProcessor.rewrite(query);
+
+            // containsArabic returns false when processor is null, so no Arabic expansion
+            assertThat(result).isNotNull();
         }
     }
 }

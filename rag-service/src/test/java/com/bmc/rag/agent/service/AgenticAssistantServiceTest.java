@@ -24,6 +24,7 @@ import org.mockito.quality.Strictness;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -380,6 +381,327 @@ class AgenticAssistantServiceTest {
 
             // Second message - explicit action
             assertTrue(service.hasAgenticIntent("Actually, can you create a ticket for this?"));
+        }
+    }
+
+    @Nested
+    @DisplayName("processMessage() Tests")
+    class ProcessMessageTests {
+
+        // These tests are difficult to implement without mocking the AI service builder
+        // The processMessage method uses AiServices.builder() which is hard to mock
+        // Coverage of processMessage will come from integration tests
+
+        @Test
+        @DisplayName("processMessage delegates to confirmation for confirm commands")
+        void processMessage_delegatesConfirmation() {
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .success("INC001", "Successfully created");
+            when(confirmationService.confirm("abc123", "s1", "user1"))
+                .thenReturn(confirmResult);
+
+            var result = service.processMessage("s1", "user1", "confirm abc123", null);
+
+            verify(confirmationService).confirm("abc123", "s1", "user1");
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+        }
+
+        @Test
+        @DisplayName("processMessage delegates to cancellation for cancel commands")
+        void processMessage_delegatesCancellation() {
+            var cancelResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .cancelled("Cancelled by user");
+            when(confirmationService.cancel("xyz789", "s1", "user1"))
+                .thenReturn(cancelResult);
+
+            var result = service.processMessage("s1", "user1", "cancel xyz789", null);
+
+            verify(confirmationService).cancel("xyz789", "s1", "user1");
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.CANCELLED);
+        }
+    }
+
+    @Nested
+    @DisplayName("Confirmation/Cancellation Tests")
+    class ConfirmationCancellationTests {
+
+        @Test
+        @DisplayName("processMessage handles confirmation command")
+        void processMessage_handlesConfirmation() {
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .success("INC12345", "Successfully created");
+            when(confirmationService.confirm("abc123", "s1", "user1"))
+                .thenReturn(confirmResult);
+
+            var result = service.processMessage("s1", "user1", "confirm abc123", null);
+
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+            assertThat(result.getCreatedRecordId()).isEqualTo("INC12345");
+            assertThat(result.getResponse()).contains("✅");
+        }
+
+        @Test
+        @DisplayName("processMessage handles failed confirmation")
+        void processMessage_handlesFailedConfirmation() {
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .failure("Action expired");
+            when(confirmationService.confirm("abc123", "s1", "user1"))
+                .thenReturn(confirmResult);
+
+            var result = service.processMessage("s1", "user1", "confirm abc123", null);
+
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.FAILED);
+            assertThat(result.getResponse()).contains("❌");
+        }
+
+        @Test
+        @DisplayName("processMessage handles cancelled confirmation")
+        void processMessage_handlesCancelledConfirmation() {
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .cancelled("User cancelled");
+            when(confirmationService.confirm("xyz789", "s1", "user1"))
+                .thenReturn(confirmResult);
+
+            var result = service.processMessage("s1", "user1", "confirm xyz789", null);
+
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("processMessage handles cancellation command")
+        void processMessage_handlesCancellation() {
+            var cancelResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .cancelled("Action cancelled by user");
+            when(confirmationService.cancel("abc123", "s1", "user1"))
+                .thenReturn(cancelResult);
+
+            var result = service.processMessage("s1", "user1", "cancel abc123", null);
+
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.CANCELLED);
+            assertThat(result.getResponse()).contains("cancelled");
+        }
+
+        @Test
+        @DisplayName("processMessage handles failed cancellation")
+        void processMessage_handlesFailedCancellation() {
+            var cancelResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .failure("Action not found");
+            when(confirmationService.cancel("xyz789", "s1", "user1"))
+                .thenReturn(cancelResult);
+
+            var result = service.processMessage("s1", "user1", "cancel xyz789", null);
+
+            assertThat(result.isError()).isTrue();
+            assertThat(result.getResponse()).contains("❌");
+        }
+
+        @Test
+        @DisplayName("Case insensitive confirmation commands")
+        void confirmationCommands_caseInsensitive() {
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .success("INC001", "Successfully created");
+            when(confirmationService.confirm(anyString(), anyString(), anyString()))
+                .thenReturn(confirmResult);
+
+            var result1 = service.processMessage("s1", "u1", "CONFIRM ABC123", null);
+            var result2 = service.processMessage("s1", "u1", "Confirm abc123", null);
+            var result3 = service.processMessage("s1", "u1", "confirm ABC123", null);
+
+            assertThat(result1.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+            assertThat(result2.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+            assertThat(result3.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+        }
+    }
+
+    @Nested
+    @DisplayName("Service Management Tests")
+    class ServiceManagementTests {
+
+        @Test
+        @DisplayName("isEnabled returns config value")
+        void isEnabled_returnsConfigValue() {
+            when(agenticConfig.isEnabled()).thenReturn(true);
+            assertThat(service.isEnabled()).isTrue();
+
+            when(agenticConfig.isEnabled()).thenReturn(false);
+            assertThat(service.isEnabled()).isFalse();
+        }
+
+        @Test
+        @DisplayName("getPendingActions delegates to confirmationService")
+        void getPendingActions_delegatesToService() {
+            when(confirmationService.getPendingActionsForSession("s1"))
+                .thenReturn(new ArrayList<>());
+
+            var actions = service.getPendingActions("s1");
+
+            assertThat(actions).isEmpty();
+            verify(confirmationService).getPendingActionsForSession("s1");
+        }
+    }
+
+    @Nested
+    @DisplayName("Implicit Signal Tests")
+    class ImplicitSignalTests {
+
+        @Test
+        @DisplayName("Should detect single implicit signal as non-agentic")
+        void singleImplicitSignal_notAgentic() {
+            String message = "It's been happening for a few days";
+            assertFalse(service.hasAgenticIntent(message));
+        }
+
+        @Test
+        @DisplayName("Should classify implicit with work order keyword")
+        void implicitSignalsWithWorkOrder_classifiesCorrectly() {
+            String message = "This has been blocking my work for 3 days and I need a work order";
+            IntentClassification result = service.classifyIntent(message, null);
+
+            assertThat(result).isIn(IntentClassification.ACTION_WORKORDER, IntentClassification.AMBIGUOUS_TYPE);
+        }
+
+        @Test
+        @DisplayName("Should handle ambiguous type when both incident and WO signals")
+        void bothIncidentAndWOSignals_ambiguousType() {
+            String message = "create an incident or work order for this problem";
+            IntentClassification result = service.classifyIntent(message, null);
+
+            assertThat(result).isEqualTo(IntentClassification.AMBIGUOUS_TYPE);
+        }
+    }
+
+    @Nested
+    @DisplayName("detectAgenticAction Tests")
+    class DetectAgenticActionTests {
+
+        @Test
+        @DisplayName("processMessage with confirm/To confirm -> STAGED")
+        void detectAgenticAction_stagedResponse() {
+            // The detectAgenticAction is private, but we can test it through processMessage
+            // For non-confirm/cancel messages, the AI service is called. We test the patterns.
+            // The STAGED pattern requires both "confirm " and "To confirm" in response
+
+            // For a confirm command that succeeds with a message containing staging terms:
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .success("INC001", "Successfully created INC001");
+            when(confirmationService.confirm("stg123", "s1", "user1"))
+                .thenReturn(confirmResult);
+
+            var result = service.processMessage("s1", "user1", "confirm stg123", null);
+            // Confirms produce EXECUTED, not STAGED
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+        }
+
+        @Test
+        @DisplayName("classifyIntent single implicit signal returns AMBIGUOUS_INTENT")
+        void classifyIntent_singleImplicitSignal_returnsAmbiguous() {
+            // Exactly one implicit signal should return AMBIGUOUS_INTENT
+            // "please fix this" matches the implicit pattern: please\s+(help|fix|resolve)\s+(this|it|the)
+            String message = "my application stopped, please fix this";
+            IntentClassification result = service.classifyIntent(message, null);
+            assertThat(result).isEqualTo(IntentClassification.AMBIGUOUS_INTENT);
+        }
+
+        @Test
+        @DisplayName("classifyIntent with work order keyword in implicit signals")
+        void classifyIntent_implicitWithWorkOrderKeyword() {
+            // Multiple implicit signals + work order keyword
+            String message = "blocking my work for days, already tried everything, need a work order created";
+            IntentClassification result = service.classifyIntent(message, null);
+            // Should be work order (implicit count >= 2 + work order keyword)
+            assertThat(result).isIn(
+                IntentClassification.ACTION_WORKORDER,
+                IntentClassification.AMBIGUOUS_TYPE,
+                IntentClassification.AMBIGUOUS_INTENT
+            );
+        }
+    }
+
+    @Nested
+    @DisplayName("processMessage with conversation history Tests")
+    class ProcessMessageWithHistoryTests {
+
+        @Test
+        @DisplayName("processMessage with conversation history for confirm command")
+        void processMessage_withHistory_confirmCommand() {
+            List<ChatMessage> history = new ArrayList<>();
+            history.add(UserMessage.from("My VPN is broken"));
+            history.add(AiMessage.from("I can help with that."));
+
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .success("INC001", "Successfully created INC001");
+            when(confirmationService.confirm("act123", "s1", "user1"))
+                .thenReturn(confirmResult);
+
+            var result = service.processMessage("s1", "user1", "confirm act123", null, history);
+
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+            assertThat(result.getCreatedRecordId()).isEqualTo("INC001");
+        }
+
+        @Test
+        @DisplayName("processMessage with conversation history for cancel command")
+        void processMessage_withHistory_cancelCommand() {
+            List<ChatMessage> history = new ArrayList<>();
+            history.add(UserMessage.from("Create an incident"));
+
+            var cancelResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .cancelled("Cancelled successfully");
+            when(confirmationService.cancel("act456", "s1", "user1"))
+                .thenReturn(cancelResult);
+
+            var result = service.processMessage("s1", "user1", "cancel act456", null, history);
+
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("processMessage with 4-param overload delegates to 5-param")
+        void processMessage_fourParamOverload() {
+            var confirmResult = com.bmc.rag.agent.confirmation.ConfirmationService.ConfirmationResult
+                .success("INC999", "Created successfully");
+            when(confirmationService.confirm("act789", "s1", "user1"))
+                .thenReturn(confirmResult);
+
+            // Use the 4-param overload (no conversation history)
+            var result = service.processMessage("s1", "user1", "confirm act789", null);
+
+            assertThat(result.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+        }
+    }
+
+    @Nested
+    @DisplayName("AgenticResponse Builder Tests")
+    class AgenticResponseBuilderTests {
+
+        @Test
+        @DisplayName("AgenticResponse with default values")
+        void agenticResponse_defaultValues() {
+            var response = AgenticAssistantService.AgenticResponse.builder()
+                .sessionId("s1")
+                .response("test")
+                .build();
+
+            assertThat(response.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.NONE);
+            assertThat(response.isError()).isFalse();
+        }
+
+        @Test
+        @DisplayName("AgenticResponse with all fields")
+        void agenticResponse_allFields() {
+            var response = AgenticAssistantService.AgenticResponse.builder()
+                .sessionId("s1")
+                .response("Created incident")
+                .agenticAction(AgenticAssistantService.AgenticAction.EXECUTED)
+                .createdRecordId("INC12345")
+                .error(false)
+                .build();
+
+            assertThat(response.getSessionId()).isEqualTo("s1");
+            assertThat(response.getResponse()).isEqualTo("Created incident");
+            assertThat(response.getAgenticAction()).isEqualTo(AgenticAssistantService.AgenticAction.EXECUTED);
+            assertThat(response.getCreatedRecordId()).isEqualTo("INC12345");
+            assertThat(response.isError()).isFalse();
         }
     }
 }

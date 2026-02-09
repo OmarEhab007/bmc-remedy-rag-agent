@@ -125,4 +125,264 @@ class PostgresChatMemoryStoreTest {
 
         assertEquals(0, count);
     }
+
+    @Test
+    @DisplayName("getMessages should return empty list when no messages found")
+    void testGetMessagesReturnsEmptyList() {
+        when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object.class)))
+            .thenReturn(java.util.Collections.emptyList());
+
+        var messages = chatMemoryStore.getMessages("session-empty");
+
+        assertTrue(messages.isEmpty());
+    }
+
+    @Test
+    @DisplayName("getMessages should retrieve user messages")
+    void testGetMessagesRetrievesUserMessages() {
+        when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object.class)))
+            .thenAnswer(invocation -> {
+                org.springframework.jdbc.core.RowMapper<?> mapper = invocation.getArgument(1);
+                java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+                when(rs.getString("message_type")).thenReturn("USER");
+                when(rs.getString("content")).thenReturn("Hello");
+                return java.util.List.of(mapper.mapRow(rs, 1));
+            });
+
+        var messages = chatMemoryStore.getMessages("session-1");
+
+        assertEquals(1, messages.size());
+        assertTrue(messages.get(0) instanceof dev.langchain4j.data.message.UserMessage);
+    }
+
+    @Test
+    @DisplayName("getMessages should retrieve AI messages")
+    void testGetMessagesRetrievesAiMessages() {
+        when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object.class)))
+            .thenAnswer(invocation -> {
+                org.springframework.jdbc.core.RowMapper<?> mapper = invocation.getArgument(1);
+                java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+                when(rs.getString("message_type")).thenReturn("AI");
+                when(rs.getString("content")).thenReturn("Hi there");
+                return java.util.List.of(mapper.mapRow(rs, 1));
+            });
+
+        var messages = chatMemoryStore.getMessages("session-1");
+
+        assertEquals(1, messages.size());
+        assertTrue(messages.get(0) instanceof dev.langchain4j.data.message.AiMessage);
+    }
+
+    @Test
+    @DisplayName("getMessages should retrieve system messages")
+    void testGetMessagesRetrievesSystemMessages() {
+        when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object.class)))
+            .thenAnswer(invocation -> {
+                org.springframework.jdbc.core.RowMapper<?> mapper = invocation.getArgument(1);
+                java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+                when(rs.getString("message_type")).thenReturn("SYSTEM");
+                when(rs.getString("content")).thenReturn("System prompt");
+                return java.util.List.of(mapper.mapRow(rs, 1));
+            });
+
+        var messages = chatMemoryStore.getMessages("session-1");
+
+        assertEquals(1, messages.size());
+        assertTrue(messages.get(0) instanceof dev.langchain4j.data.message.SystemMessage);
+    }
+
+    @Test
+    @DisplayName("updateMessages should delete and insert")
+    void testUpdateMessagesDeletesAndInserts() {
+        when(jdbcTemplate.update(anyString(), any(Object.class))).thenReturn(1);
+        when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).thenReturn(1);
+
+        java.util.List<dev.langchain4j.data.message.ChatMessage> messages = java.util.List.of(
+            dev.langchain4j.data.message.UserMessage.from("test")
+        );
+
+        chatMemoryStore.updateMessages("session-1", messages);
+
+        // Verify delete was called
+        verify(jdbcTemplate).update("DELETE FROM chat_memory WHERE session_id = ?", "session-1");
+        // Verify insert was called
+        verify(jdbcTemplate, atLeastOnce()).update(
+            contains("INSERT INTO chat_memory"),
+            any(), eq("session-1"), eq("USER"), eq("test"), any()
+        );
+    }
+
+    @Test
+    @DisplayName("updateMessages should handle null messages")
+    void testUpdateMessagesHandlesNull() {
+        when(jdbcTemplate.update(anyString(), any(Object.class))).thenReturn(0);
+
+        chatMemoryStore.updateMessages("session-1", null);
+
+        verify(jdbcTemplate).update("DELETE FROM chat_memory WHERE session_id = ?", "session-1");
+        verify(jdbcTemplate, never()).update(contains("INSERT"), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("updateMessages should handle empty list")
+    void testUpdateMessagesHandlesEmptyList() {
+        when(jdbcTemplate.update(anyString(), any(Object.class))).thenReturn(0);
+
+        chatMemoryStore.updateMessages("session-1", java.util.Collections.emptyList());
+
+        verify(jdbcTemplate).update("DELETE FROM chat_memory WHERE session_id = ?", "session-1");
+        verify(jdbcTemplate, never()).update(contains("INSERT"), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("addMessage should insert single message")
+    void testAddMessageInsertsSingleMessage() {
+        when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+
+        chatMemoryStore.addMessage("session-1", "user1", dev.langchain4j.data.message.UserMessage.from("hello"));
+
+        verify(jdbcTemplate).update(
+            contains("INSERT INTO chat_memory"),
+            any(), eq("session-1"), eq("user1"), eq("USER"), eq("hello"), any()
+        );
+    }
+
+    @Test
+    @DisplayName("getActiveSessions should return session IDs")
+    void testGetActiveSessionsReturnsIds() {
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class)))
+            .thenReturn(java.util.List.of("session-1", "session-2"));
+
+        var sessions = chatMemoryStore.getActiveSessions();
+
+        assertEquals(2, sessions.size());
+        assertTrue(sessions.contains("session-1"));
+        assertTrue(sessions.contains("session-2"));
+    }
+
+    @Test
+    @DisplayName("getSessionsForUser should use parameterized query")
+    void testGetSessionsForUserUsesParameterizedQuery() {
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(Object.class)))
+            .thenReturn(java.util.List.of("session-1"));
+
+        var sessions = chatMemoryStore.getSessionsForUser("user123");
+
+        assertEquals(1, sessions.size());
+        verify(jdbcTemplate).queryForList(
+            contains("WHERE user_id = ?"),
+            eq(String.class),
+            eq("user123")
+        );
+    }
+
+    @Test
+    @DisplayName("setSessionUser should update user_id")
+    void testSetSessionUserUpdates() {
+        when(jdbcTemplate.update(
+            eq("UPDATE chat_memory SET user_id = ? WHERE session_id = ?"),
+            eq("user456"),
+            eq("session-1")
+        )).thenReturn(1);
+
+        chatMemoryStore.setSessionUser("session-1", "user456");
+
+        verify(jdbcTemplate).update(
+            eq("UPDATE chat_memory SET user_id = ? WHERE session_id = ?"),
+            eq("user456"),
+            eq("session-1")
+        );
+    }
+
+    @Test
+    @DisplayName("getSessionSummaries should return SessionInfo records")
+    void testGetSessionSummariesReturnsInfo() {
+        when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class)))
+            .thenAnswer(invocation -> {
+                org.springframework.jdbc.core.RowMapper<?> mapper = invocation.getArgument(1);
+                java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+                when(rs.getString("session_id")).thenReturn("session-1");
+                when(rs.getString("title")).thenReturn("Test title");
+                when(rs.getInt("message_count")).thenReturn(5);
+                when(rs.getLong("last_updated_millis")).thenReturn(1234567890L);
+                return java.util.List.of(mapper.mapRow(rs, 1));
+            });
+
+        var summaries = chatMemoryStore.getSessionSummaries();
+
+        assertEquals(1, summaries.size());
+        var info = summaries.get(0);
+        assertEquals("session-1", info.sessionId());
+        assertEquals("Test title", info.title());
+        assertEquals(5, info.messageCount());
+        assertEquals(1234567890L, info.lastUpdated());
+    }
+
+    @Test
+    @DisplayName("SessionInfo record should be created correctly")
+    void testSessionInfoRecordCreation() {
+        var info = new PostgresChatMemoryStore.SessionInfo("s1", "title", 10, 999999L);
+
+        assertEquals("s1", info.sessionId());
+        assertEquals("title", info.title());
+        assertEquals(10, info.messageCount());
+        assertEquals(999999L, info.lastUpdated());
+    }
+
+    @Test
+    @DisplayName("getMessages should throw on unknown message type")
+    void testGetMessagesThrowsOnUnknownType() {
+        when(jdbcTemplate.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object.class)))
+            .thenAnswer(invocation -> {
+                org.springframework.jdbc.core.RowMapper<?> mapper = invocation.getArgument(1);
+                java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+                when(rs.getString("message_type")).thenReturn("UNKNOWN_TYPE");
+                when(rs.getString("content")).thenReturn("test");
+
+                // Invoke the mapper directly; it will throw IllegalArgumentException
+                return java.util.List.of(mapper.mapRow(rs, 1));
+            });
+
+        assertThrows(IllegalArgumentException.class, () -> chatMemoryStore.getMessages("session-1"));
+    }
+
+    @Test
+    @DisplayName("updateMessages should handle unsupported message type")
+    void testUpdateMessagesHandlesUnsupportedType() {
+        when(jdbcTemplate.update(anyString(), any(Object.class))).thenReturn(0);
+
+        // Create a custom unsupported message type using ToolExecutionResultMessage
+        // which is a valid ChatMessage type but not handled by the store
+        dev.langchain4j.data.message.ChatMessage unsupportedMessage =
+            dev.langchain4j.data.message.ToolExecutionResultMessage.from(
+                null,
+                "tool-1",
+                "result"
+            );
+
+        java.util.List<dev.langchain4j.data.message.ChatMessage> messages = java.util.List.of(unsupportedMessage);
+
+        // Should throw IllegalArgumentException when trying to get message type
+        assertThrows(IllegalArgumentException.class, () -> {
+            chatMemoryStore.updateMessages("session-1", messages);
+        });
+    }
+
+    @Test
+    @DisplayName("addMessage should handle all message types")
+    void testAddMessageHandlesAllTypes() {
+        when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+
+        // Test UserMessage
+        chatMemoryStore.addMessage("s1", "u1", dev.langchain4j.data.message.UserMessage.from("user text"));
+        verify(jdbcTemplate).update(contains("INSERT"), any(), eq("s1"), eq("u1"), eq("USER"), eq("user text"), any());
+
+        // Test AiMessage
+        chatMemoryStore.addMessage("s2", "u2", dev.langchain4j.data.message.AiMessage.from("ai text"));
+        verify(jdbcTemplate).update(contains("INSERT"), any(), eq("s2"), eq("u2"), eq("AI"), eq("ai text"), any());
+
+        // Test SystemMessage
+        chatMemoryStore.addMessage("s3", "u3", dev.langchain4j.data.message.SystemMessage.from("system text"));
+        verify(jdbcTemplate).update(contains("INSERT"), any(), eq("s3"), eq("u3"), eq("SYSTEM"), eq("system text"), any());
+    }
 }
