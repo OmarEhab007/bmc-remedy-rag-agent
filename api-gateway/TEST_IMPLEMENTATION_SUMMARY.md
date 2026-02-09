@@ -195,10 +195,10 @@ open api-gateway/target/site/jacoco/index.html
 ### 🎓 Next Steps
 
 1. **Create remaining test files** using the patterns established
-2. **Aim for 80%+ code coverage** on api-gateway module
+2. **Aim for 85%+ code coverage** on api-gateway module (project target: 85% overall, 75% minimum per module)
 3. **Add integration tests** for critical workflows
 4. **Document edge cases** that need testing
-5. **Set up CI pipeline** to run tests on every commit
+5. **Verify CI pipeline** runs all api-gateway tests successfully on every commit (CI already configured)
 
 ### 📝 Testing Checklist
 

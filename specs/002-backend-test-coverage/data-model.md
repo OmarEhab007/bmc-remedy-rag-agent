@@ -103,4 +103,6 @@ Phase 0: JaCoCo Setup (no dependencies)
 | api-gateway | 67 | 3 | 4% | 25 | 85%+ |
 | **Total** | **148** | **16** | **~11%** | **~85** | **85%+** |
 
+> **Coverage Metric:** Line coverage measured by JaCoCo 0.8.12
+
 Files excluded from test requirement (no business logic): ~20 (pure DTOs, constants, deprecated config, declarative config)

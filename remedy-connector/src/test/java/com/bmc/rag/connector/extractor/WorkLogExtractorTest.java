@@ -254,7 +254,7 @@ class WorkLogExtractorTest {
     }
 
     @Test
-    void extractIncidentWorkLogs_paginationRequired_retrievesAllPages() {
+    void extractIncidentWorkLogs_multipleResults_retrievesAll() {
         // Given
         when(mockConfig.getChunkSize()).thenReturn(2);
 

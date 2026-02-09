@@ -96,9 +96,12 @@ public class CreationResult {
             return message;
         }
         if (success) {
-            return String.format("Successfully created %s", recordId);
+            return recordId != null
+                ? String.format("Successfully created %s", recordId)
+                : "Successfully created record";
         } else {
-            return String.format("Failed to create record: %s", errorMessage);
+            return String.format("Failed to create record: %s",
+                errorMessage != null ? errorMessage : "Unknown error");
         }
     }
 

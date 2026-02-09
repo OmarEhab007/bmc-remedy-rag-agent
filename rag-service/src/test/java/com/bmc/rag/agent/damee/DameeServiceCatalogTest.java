@@ -282,9 +282,8 @@ class DameeServiceCatalogTest {
         List<DameeService> results = catalog.searchByKeyword("manage users", 5);
 
         // Then: description match has lower score than name match
-        if (!results.isEmpty()) {
-            assertThat(results.get(0).getScore()).isGreaterThan(0);
-        }
+        assertThat(results).as("Expected results for 'manage users' search").isNotEmpty();
+        assertThat(results.get(0).getScore()).isGreaterThan(0);
     }
 
     @Test
@@ -397,9 +396,8 @@ class DameeServiceCatalogTest {
         List<DameeService> results = catalog.searchByKeyword("permission application", 5);
 
         // Then: service with multiple matches has a positive score
-        if (!results.isEmpty()) {
-            assertThat(results.get(0).getScore()).isGreaterThan(0);
-        }
+        assertThat(results).as("Expected results for 'permission application' search").isNotEmpty();
+        assertThat(results.get(0).getScore()).isGreaterThan(0);
     }
 
     @Test

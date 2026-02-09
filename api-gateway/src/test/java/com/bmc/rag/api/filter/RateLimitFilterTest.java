@@ -141,8 +141,7 @@ class RateLimitFilterTest {
             request.setRequestURI("/api/v1/chat");
             MockHttpServletResponse response = new MockHttpServletResponse();
 
-            // Configure mock to accept both possible user identifiers
-            when(rateLimitConfig.isRateLimitedChat("john.doe")).thenReturn(false);
+            // Configure mock to accept any user identifier
             when(rateLimitConfig.isRateLimitedChat(anyString())).thenReturn(false);
 
             rateLimitFilter.doFilterInternal(request, response, filterChain);

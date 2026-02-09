@@ -440,7 +440,7 @@ class ActionControllerTest {
                 .contentType(MediaType.APPLICATION_JSON))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$", hasSize(1)))
             .andExpect(jsonPath("$[0].actionId").value("abc12345"));
-        // Note: The non-matching action is filtered out by belongsTo() logic
     }
 }

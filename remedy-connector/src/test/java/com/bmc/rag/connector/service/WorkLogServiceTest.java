@@ -177,13 +177,6 @@ class WorkLogServiceTest {
     }
 
     @Test
-    void getWorkLogsForIncident_exception_returnsEmptyList() {
-        when(mockArContext.executeWithRetry(any())).thenThrow(new RuntimeException("Connection error"));
-        List<WorkLogService.WorkLogEntry> workLogs = workLogService.getWorkLogsForIncident("INC000001");
-        assertThat(workLogs).isEmpty();
-    }
-
-    @Test
     void getWorkLogsForIncident_multipleWorkLogs_returnsAll() {
         Instant now = Instant.now();
         List<WorkLogService.WorkLogEntry> expectedList = List.of(

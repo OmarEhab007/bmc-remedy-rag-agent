@@ -50,7 +50,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             if (correlationId == null || correlationId.isBlank()) {
                 correlationId = UUID.randomUUID().toString();
             } else {
-                correlationId = sanitizeCorrelationId(correlationId);
+                correlationId = sanitizeHeaderValue(correlationId);
             }
             MDC.put(CORRELATION_ID_MDC_KEY, correlationId);
             response.setHeader(CORRELATION_ID_HEADER, correlationId);
@@ -58,7 +58,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             // Populate sessionId from request header (used by chat/agentic endpoints)
             String sessionId = request.getHeader(SESSION_ID_HEADER);
             if (sessionId != null && !sessionId.isBlank()) {
-                MDC.put(SESSION_ID_MDC_KEY, sessionId);
+                MDC.put(SESSION_ID_MDC_KEY, sanitizeHeaderValue(sessionId));
             }
 
             // Populate userId from authenticated principal if available
@@ -75,14 +75,14 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Sanitizes a client-provided correlation ID to prevent CRLF header injection.
+     * Sanitizes a client-provided header value to prevent CRLF header injection.
      * <p>
      * Strips control characters, validates against allowed character set
      * {@code [a-zA-Z0-9\-_.]}, and enforces a maximum length of 64 characters.
      * Returns a generated UUID if the sanitized value is empty or the original
      * contained only invalid characters.
      */
-    private String sanitizeCorrelationId(String correlationId) {
+    private String sanitizeHeaderValue(String correlationId) {
         // Strip control characters (including CR, LF, tab, etc.)
         String sanitized = correlationId.replaceAll("[\\p{Cntrl}]", "");
 

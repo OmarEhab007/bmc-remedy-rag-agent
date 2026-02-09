@@ -182,7 +182,7 @@ class CreationResultTest {
         String message = result.toUserMessage();
 
         // Then
-        assertThat(message).isEqualTo("Successfully created null");
+        assertThat(message).isEqualTo("Successfully created record");
     }
 
     @Test
@@ -197,7 +197,7 @@ class CreationResultTest {
         String message = result.toUserMessage();
 
         // Then
-        assertThat(message).isEqualTo("Failed to create record: null");
+        assertThat(message).isEqualTo("Failed to create record: Unknown error");
     }
 
     @Test

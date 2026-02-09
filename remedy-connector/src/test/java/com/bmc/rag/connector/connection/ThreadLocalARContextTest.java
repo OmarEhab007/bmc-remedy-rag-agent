@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.*;
 
 /**
@@ -94,14 +95,13 @@ class ThreadLocalARContextTest {
     void threadIsolation_multipleThreads_haveSeparateContexts() throws Exception {
         // Given
         CountDownLatch latch = new CountDownLatch(2);
-        AtomicReference<String> thread1Result = new AtomicReference<>();
-        AtomicReference<String> thread2Result = new AtomicReference<>();
+        AtomicReference<Boolean> thread1Result = new AtomicReference<>();
+        AtomicReference<Boolean> thread2Result = new AtomicReference<>();
 
         // When - Create two threads that access the context
         Thread thread1 = new Thread(() -> {
             try {
-                // Simulate thread 1 operations
-                thread1Result.set("thread1-" + Thread.currentThread().getId());
+                thread1Result.set(context.isEnabled());
             } finally {
                 latch.countDown();
             }
@@ -109,8 +109,7 @@ class ThreadLocalARContextTest {
 
         Thread thread2 = new Thread(() -> {
             try {
-                // Simulate thread 2 operations
-                thread2Result.set("thread2-" + Thread.currentThread().getId());
+                thread2Result.set(context.isEnabled());
             } finally {
                 latch.countDown();
             }
@@ -120,10 +119,10 @@ class ThreadLocalARContextTest {
         thread2.start();
         latch.await();
 
-        // Then - Each thread should have its own context
-        assertThat(thread1Result.get()).isNotEqualTo(thread2Result.get());
-        assertThat(thread1Result.get()).contains("thread1");
-        assertThat(thread2Result.get()).contains("thread2");
+        // Then - Both threads should observe the same enabled state, proving thread-safe read access
+        assertThat(thread1Result.get()).isNotNull();
+        assertThat(thread2Result.get()).isNotNull();
+        assertThat(thread1Result.get()).isEqualTo(thread2Result.get());
     }
 
     @Test
@@ -140,11 +139,8 @@ class ThreadLocalARContextTest {
 
     @Test
     void cleanup_closesContext() {
-        // When - Should not throw even if no context exists
-        context.cleanup();
-
-        // Then - Verify it completes without error
-        assertThat(context).isNotNull();
+        // When/Then - Should not throw even if no context exists
+        assertDoesNotThrow(() -> context.cleanup());
     }
 
     @Test

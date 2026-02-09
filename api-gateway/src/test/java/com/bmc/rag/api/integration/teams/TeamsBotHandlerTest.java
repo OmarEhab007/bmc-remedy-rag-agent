@@ -323,7 +323,7 @@ class TeamsBotHandlerTest {
     @Test
     @MockitoSettings(strictness = Strictness.LENIENT)
     void processMessage_shouldHandleLongMessageTruncationInLog() {
-        // Given - a message with exactly 50 characters (edge case for logging truncation)
+        // Given - a message with 51 characters (exceeds 50-char truncation threshold)
         String text50 = "a".repeat(51);
         ObjectNode activity = createMessageActivity(text50, "user-123", "John", "conv-123");
 

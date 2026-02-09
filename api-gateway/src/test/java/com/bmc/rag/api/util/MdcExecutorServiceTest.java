@@ -168,7 +168,7 @@ class MdcExecutorServiceTest {
         void shouldRestorePreviousMdcAfterRunnableCompletes() throws Exception {
             MDC.put("original", "value-1");
 
-            CountDownLatch latch = new CountDownLatch(1);
+            CountDownLatch latch = new CountDownLatch(2);
 
             Runnable task = () -> {
                 MDC.put("modified", "value-2");
@@ -219,7 +219,7 @@ class MdcExecutorServiceTest {
         void shouldClearMdcWhenContextWasNull() throws Exception {
             MDC.clear();
 
-            CountDownLatch latch = new CountDownLatch(1);
+            CountDownLatch latch = new CountDownLatch(2);
 
             Runnable task = () -> {
                 assertThat(MDC.getCopyOfContextMap()).isNull();
@@ -390,7 +390,7 @@ class MdcExecutorServiceTest {
         void shouldCleanUpMdcAfterRunnableCompletes() throws Exception {
             MDC.put("requestId", "req-123");
 
-            CountDownLatch latch = new CountDownLatch(1);
+            CountDownLatch latch = new CountDownLatch(2);
 
             Runnable task = () -> {
                 assertThat(MDC.get("requestId")).isEqualTo("req-123");

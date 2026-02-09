@@ -141,7 +141,7 @@ class KnowledgeExtractorTest {
     }
 
     @Test
-    void extractWithQualification_pagination_retrievesAllChunks() {
+    void extractWithQualification_multipleResults_retrievesAll() {
         // Given
         when(mockConfig.getChunkSize()).thenReturn(2);
 

@@ -93,6 +93,7 @@ class AgenticRateLimiterTest {
         @Test
         void recordAction_blankUserId_doesNotThrow() {
             rateLimiter.recordAction("  "); // Should not throw
+            assertThat(rateLimiter.getRemainingTokens("  ")).isEqualTo(0);
         }
     }
 
@@ -136,7 +137,7 @@ class AgenticRateLimiterTest {
         }
 
         @Test
-        void getRemainingTokens_blankUserId_returnsZero() {
+        void getRemainingTokens_emptyUserId_returnsZero() {
             assertThat(rateLimiter.getRemainingTokens("")).isEqualTo(0);
         }
     }

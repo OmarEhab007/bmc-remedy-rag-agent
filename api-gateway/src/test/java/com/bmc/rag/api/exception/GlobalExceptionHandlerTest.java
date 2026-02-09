@@ -208,6 +208,9 @@ class GlobalExceptionHandlerTest {
             ResponseEntity<Map<String, Object>> response1 = exceptionHandler.handleGeneralException(exception);
             ResponseEntity<Map<String, Object>> response2 = exceptionHandler.handleGeneralException(exception);
 
+            assertThat(response1.getBody()).isNotNull();
+            assertThat(response2.getBody()).isNotNull();
+
             String errorId1 = (String) response1.getBody().get("errorId");
             String errorId2 = (String) response2.getBody().get("errorId");
 
@@ -265,6 +268,9 @@ class GlobalExceptionHandlerTest {
 
             ResponseEntity<Map<String, Object>> response1 = exceptionHandler.handleRuntimeException(exception);
             ResponseEntity<Map<String, Object>> response2 = exceptionHandler.handleRuntimeException(exception);
+
+            assertThat(response1.getBody()).isNotNull();
+            assertThat(response2.getBody()).isNotNull();
 
             String errorId1 = (String) response1.getBody().get("errorId");
             String errorId2 = (String) response2.getBody().get("errorId");

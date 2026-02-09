@@ -79,7 +79,12 @@ class SearchResultNestedClassTest {
 
         assertThat(result.getId()).isEqualTo(newId);
         assertThat(result.getChunkId()).isEqualTo("new-chunk");
+        assertThat(result.getTextSegment()).isEqualTo("new text");
         assertThat(result.getSourceType()).isEqualTo("WorkOrder");
+        assertThat(result.getSourceId()).isEqualTo("WO001");
+        assertThat(result.getEntryId()).isEqualTo("entry-789");
+        assertThat(result.getChunkType()).isEqualTo("DESCRIPTION");
+        assertThat(result.getSequenceNumber()).isEqualTo(5);
         assertThat(result.getScore()).isEqualTo(0.85f);
     }
 

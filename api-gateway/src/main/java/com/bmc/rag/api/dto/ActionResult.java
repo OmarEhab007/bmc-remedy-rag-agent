@@ -72,6 +72,10 @@ public class ActionResult {
 
     /**
      * Create a cancellation result.
+     * <p>
+     * Note: {@code success} is set to {@code true} because cancellation represents
+     * a successful operation -- the system successfully processed the cancellation
+     * request. It does not indicate that the original action was executed.
      */
     public static ActionResult cancelled(String actionId, String message) {
         return ActionResult.builder()
