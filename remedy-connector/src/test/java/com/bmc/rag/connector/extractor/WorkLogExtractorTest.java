@@ -227,7 +227,7 @@ class WorkLogExtractorTest {
     }
 
     @Test
-    void extractIncidentWorkLogs_multipleLogsForSingleIncident_returnsSortedByDate() {
+    void extractIncidentWorkLogs_multipleLogsForSingleIncident_returnsAllLogs() {
         // Given
         String incidentNumber = "INC000001";
         WorkLogEntry log1 = WorkLogEntry.builder()

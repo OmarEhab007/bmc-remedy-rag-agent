@@ -94,6 +94,7 @@ class DameeServiceToolTest {
                     .thenReturn(List.of(sampleService));
 
             String result = tool.searchServices("vpn", "  ");
+            assertThat(result).contains("VPN Access Request");
             verify(catalog).searchByKeyword("vpn", 5);
         }
 
@@ -157,6 +158,7 @@ class DameeServiceToolTest {
             assertThat(result).contains("Manager Approval Required: Yes");
             assertThat(result).contains("VIP Bypass Available: Yes");
             assertThat(result).contains("vpn, remote, network");
+            assertThat(result).contains("Submit");
         }
 
         @Test
@@ -194,7 +196,7 @@ class DameeServiceToolTest {
             when(catalog.getByCategory("IT Services")).thenReturn(List.of(sampleService));
 
             String result = tool.getServicesByCategory("IT Services");
-            assertThat(result).contains("IT Services (1 services)");
+            assertThat(result).contains("IT Services (1 service)");
             assertThat(result).contains("VPN Access Request");
             assertThat(result).contains("10504");
         }

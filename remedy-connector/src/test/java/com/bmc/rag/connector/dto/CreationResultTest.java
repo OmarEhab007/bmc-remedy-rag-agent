@@ -211,24 +211,33 @@ class CreationResultTest {
 
     @Test
     void equals_sameValues_returnsTrue() {
-        // Given
-        CreationResult result1 = CreationResult.success("entry-123", "INC000001", "HPD:Help Desk");
-        CreationResult result2 = CreationResult.success("entry-123", "INC000001", "HPD:Help Desk");
+        // Given - Use fixed createdAt to ensure equals() comparison is deterministic
+        Instant fixedTime = Instant.parse("2024-01-01T00:00:00Z");
+        CreationResult result1 = CreationResult.builder()
+            .success(true).entryId("entry-123").recordId("INC000001")
+            .formName("HPD:Help Desk").createdAt(fixedTime).build();
+        CreationResult result2 = CreationResult.builder()
+            .success(true).entryId("entry-123").recordId("INC000001")
+            .formName("HPD:Help Desk").createdAt(fixedTime).build();
 
         // Then
-        assertThat(result1.isSuccess()).isEqualTo(result2.isSuccess());
-        assertThat(result1.getEntryId()).isEqualTo(result2.getEntryId());
-        assertThat(result1.getRecordId()).isEqualTo(result2.getRecordId());
+        assertThat(result1).isEqualTo(result2);
+        assertThat(result1.hashCode()).isEqualTo(result2.hashCode());
     }
 
     @Test
     void equals_differentEntryId_returnsFalse() {
-        // Given
-        CreationResult result1 = CreationResult.success("entry-123", "INC000001", "HPD:Help Desk");
-        CreationResult result2 = CreationResult.success("entry-456", "INC000001", "HPD:Help Desk");
+        // Given - Use fixed createdAt so only entryId differs
+        Instant fixedTime = Instant.parse("2024-01-01T00:00:00Z");
+        CreationResult result1 = CreationResult.builder()
+            .success(true).entryId("entry-123").recordId("INC000001")
+            .formName("HPD:Help Desk").createdAt(fixedTime).build();
+        CreationResult result2 = CreationResult.builder()
+            .success(true).entryId("entry-456").recordId("INC000001")
+            .formName("HPD:Help Desk").createdAt(fixedTime).build();
 
         // Then
-        assertThat(result1.getEntryId()).isNotEqualTo(result2.getEntryId());
+        assertThat(result1).isNotEqualTo(result2);
     }
 
     @Test

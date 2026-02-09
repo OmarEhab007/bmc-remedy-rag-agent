@@ -573,7 +573,7 @@ class ChatControllerTest {
     }
 
     @Test
-    void search_queryTruncation_logsCorrectly() throws Exception {
+    void search_longButValidQuery_succeeds() throws Exception {
         // Given - create a long query
         StringBuilder longQuery = new StringBuilder();
         for (int i = 0; i < 60; i++) {

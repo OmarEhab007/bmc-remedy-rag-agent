@@ -122,6 +122,9 @@ class FieldCollectorTest {
         FieldCollectionResult result = fieldCollector.collectNextField("10513", collectedFields);
 
         // Then: may return optional field or complete
+        assertThat(result.isComplete() || result.isOptional())
+                .as("Expected either complete or optional field")
+                .isTrue();
         if (result.isComplete()) {
             assertThat(result.getCollectedFields()).isEqualTo(collectedFields);
         } else if (result.isOptional()) {

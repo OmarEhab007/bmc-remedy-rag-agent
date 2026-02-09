@@ -370,7 +370,7 @@ class VectorStoreServiceTest {
     }
 
     @Test
-    void storeBatch_largeBatch_processesinBatches() throws Exception {
+    void storeBatch_largeBatch_processesInBatches() throws Exception {
         // Given - create 250 chunks (should be processed in 3 batches: 100, 100, 50)
         List<EmbeddedChunk> largeList = new ArrayList<>();
         for (int i = 0; i < 250; i++) {

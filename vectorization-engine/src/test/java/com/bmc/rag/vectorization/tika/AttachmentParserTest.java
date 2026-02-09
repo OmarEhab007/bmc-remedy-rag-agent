@@ -8,12 +8,15 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 /**
  * Tests for AttachmentParser using temp files.
@@ -513,12 +516,18 @@ class AttachmentParserTest {
     }
 
     @Test
-    void shutdown_executorService_shutsDownCleanly() {
-        // When
+    void shutdown_executorService_shutsDownCleanly() throws Exception {
+        // When - first shutdown
         parser.shutdown();
 
-        // Then - No exceptions thrown
-        assertThat(parser).isNotNull();
+        // Then - second shutdown should be idempotent (no exception)
+        assertDoesNotThrow(() -> parser.shutdown());
+
+        // Verify the internal executor service is actually shut down
+        Field executorField = AttachmentParser.class.getDeclaredField("executorService");
+        executorField.setAccessible(true);
+        ExecutorService executor = (ExecutorService) executorField.get(parser);
+        assertThat(executor.isShutdown()).isTrue();
     }
 
     // Helper method to create temp files

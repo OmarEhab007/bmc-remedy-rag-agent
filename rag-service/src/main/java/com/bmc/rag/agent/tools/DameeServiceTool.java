@@ -190,7 +190,7 @@ public class DameeServiceTool {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("## %s (%d services)\n\n", category, services.size()));
+        sb.append(String.format("## %s (%d %s)\n\n", category, services.size(), services.size() == 1 ? "service" : "services"));
 
         for (DameeService s : services) {
             sb.append(String.format("- **%s** (ID: %s)\n", s.getNameEn(), s.getServiceId()));

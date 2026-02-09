@@ -167,24 +167,10 @@ class SemanticChunkerTest {
         List<String> chunks = chunker.splitText(text, null, maxSize, overlap);
 
         // Then
-        if (chunks.size() > 1) {
-            // Check that there's some overlap between consecutive chunks
-            for (int i = 0; i < chunks.size() - 1; i++) {
-                String chunk1 = chunks.get(i);
-                String chunk2 = chunks.get(i + 1);
-
-                // The end of chunk1 should have some words that appear in chunk2
-                String[] words1 = chunk1.split("\\s+");
-                String[] words2 = chunk2.split("\\s+");
-
-                if (words1.length > 3 && words2.length > 3) {
-                    String lastWord = words1[words1.length - 1].toLowerCase();
-                    String chunk2Lower = chunk2.toLowerCase();
-                    // There might be overlap (not guaranteed in all cases due to context)
-                }
-            }
-        }
         assertThat(chunks).isNotEmpty();
+        for (String chunk : chunks) {
+            assertThat(chunk).isNotEmpty();
+        }
     }
 
     @Test

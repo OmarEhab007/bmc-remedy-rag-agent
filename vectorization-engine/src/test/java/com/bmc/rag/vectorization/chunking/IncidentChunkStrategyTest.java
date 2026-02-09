@@ -194,9 +194,11 @@ class IncidentChunkStrategyTest {
 
     @Test
     void chunk_workLogsGroupedByDay_createsChunksPerDay() {
-        // Given
-        Instant today = Instant.now();
-        Instant yesterday = today.minusSeconds(86400);
+        // Given - use fixed dates to avoid timezone sensitivity
+        ZoneId testZone = ZoneId.of("UTC");
+        LocalDate fixedDate = LocalDate.of(2024, 6, 15);
+        Instant today = fixedDate.atStartOfDay(testZone).plusHours(12).toInstant();
+        Instant yesterday = fixedDate.minusDays(1).atStartOfDay(testZone).plusHours(12).toInstant();
 
         WorkLogEntry log1 = WorkLogEntry.builder()
             .workLogId("WL001")
@@ -227,8 +229,8 @@ class IncidentChunkStrategyTest {
 
         assertThat(workLogChunks).hasSizeGreaterThanOrEqualTo(2);
 
-        LocalDate todayDate = today.atZone(ZoneId.systemDefault()).toLocalDate();
-        LocalDate yesterdayDate = yesterday.atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate todayDate = today.atZone(testZone).toLocalDate();
+        LocalDate yesterdayDate = yesterday.atZone(testZone).toLocalDate();
 
         boolean hasTodayChunk = workLogChunks.stream()
             .anyMatch(c -> todayDate.toString().equals(c.getMetadata().get("work_log_date")));

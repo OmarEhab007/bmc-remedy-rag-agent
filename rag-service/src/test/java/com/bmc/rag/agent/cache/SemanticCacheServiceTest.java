@@ -185,7 +185,7 @@ class SemanticCacheServiceTest {
             var noRedisService = new SemanticCacheService(null, embeddingService, objectMapper);
             ReflectionTestUtils.setField(noRedisService, "enabled", true);
             noRedisService.put("query", "response", List.of());
-            verifyNoInteractions(redisTemplate);
+            // noRedisService uses null, not the mock - just verifying no exception is sufficient
         }
 
         @Test
@@ -253,17 +253,10 @@ class SemanticCacheServiceTest {
         }
 
         @Test
-        void getStats_afterMisses_showsMisses() {
-            // Trigger misses
-            ReflectionTestUtils.setField(cacheService, "enabled", false);
-            cacheService.get("q1"); // miss (disabled)
-            cacheService.get("q2"); // miss (disabled)
-            ReflectionTestUtils.setField(cacheService, "enabled", true);
-
+        void getStats_returnsCorrectSize() {
             when(redisTemplate.opsForSet()).thenReturn(setOps);
             when(setOps.size("rag:cache-index")).thenReturn(5L);
 
-            // Note: disabled lookups don't count as misses
             var stats = cacheService.getStats();
             assertThat(stats.size()).isEqualTo(5);
         }

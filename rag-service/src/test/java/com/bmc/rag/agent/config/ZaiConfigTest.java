@@ -203,7 +203,8 @@ class ZaiConfigTest {
                 }
             });
 
-            latch.await(5, TimeUnit.SECONDS);
+            boolean completed = latch.await(5, TimeUnit.SECONDS);
+            assertThat(completed).as("Streaming should complete within timeout").isTrue();
             assertThat(tokens).isNotEmpty();
             String combined = String.join("", tokens);
             assertThat(combined).contains("mock mode");
@@ -237,7 +238,8 @@ class ZaiConfigTest {
                 }
             });
 
-            latch.await(5, TimeUnit.SECONDS);
+            boolean completed = latch.await(5, TimeUnit.SECONDS);
+            assertThat(completed).as("Streaming should complete within timeout").isTrue();
             assertThat(captured[0]).isNotNull();
             assertThat(captured[0].aiMessage().text()).contains("mock mode");
         }

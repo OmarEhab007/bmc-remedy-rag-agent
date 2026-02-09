@@ -471,7 +471,7 @@ class IncidentUpdateRequestTest {
     }
 
     @Test
-    void getUpdateSummary_withImpactAndUrgency_includesFields() {
+    void getUpdateSummary_withSummaryAndDescription_includesFields() {
         // Given
         IncidentUpdateRequest request = IncidentUpdateRequest.builder()
             .summary("Updated")

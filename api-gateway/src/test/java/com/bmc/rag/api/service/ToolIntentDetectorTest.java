@@ -3,6 +3,7 @@ package com.bmc.rag.api.service;
 import com.bmc.rag.api.service.ToolIntentDetector.Intent;
 import com.bmc.rag.api.service.ToolIntentDetector.IntentResult;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -319,9 +320,18 @@ class ToolIntentDetectorTest {
     @DisplayName("Get Incident Intent Tests")
     class GetIncidentIntentTests {
 
-        // Note: These tests verify intent detection only. The current implementation
-        // has an issue where group(7) is used instead of group(8), causing incident_id
-        // extraction to fail. Tests focus on intent detection which works correctly.
+        // TODO: Fix GET_INCIDENT_PATTERN regex bug - group(7) is used instead of group(8)
+        //       for incident_id extraction. See disabled test below for details.
+
+        @Test
+        @Disabled("Known bug: GET_INCIDENT_PATTERN uses group(7) instead of group(8) for incident_id extraction")
+        @DisplayName("detectIntent_showIncidentDetails_extractsIncidentId")
+        void detectIntent_showIncidentDetails_extractsIncidentId() {
+            IntentResult result = detector.detectIntent("show details for incident INC0012345", true);
+
+            assertThat(result.getIntent()).isEqualTo(Intent.GET_INCIDENT);
+            assertThat(result.getParameters().get("incident_id")).isEqualTo("INC0012345");
+        }
 
         @Test
         @DisplayName("detectIntent_showIncidentDetails_detectsGetIncidentIntent")
@@ -329,7 +339,6 @@ class ToolIntentDetectorTest {
             IntentResult result = detector.detectIntent("show details for incident INC0012345", true);
 
             assertThat(result.getIntent()).isEqualTo(Intent.GET_INCIDENT);
-            // incident_id extraction has implementation bug - not testing parameter here
         }
 
         @Test

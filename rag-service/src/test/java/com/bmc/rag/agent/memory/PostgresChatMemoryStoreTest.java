@@ -339,12 +339,11 @@ class PostgresChatMemoryStoreTest {
                 when(rs.getString("message_type")).thenReturn("UNKNOWN_TYPE");
                 when(rs.getString("content")).thenReturn("test");
 
-                // The mapper will throw when called with unknown type
-                assertThrows(IllegalArgumentException.class, () -> mapper.mapRow(rs, 1));
-                return java.util.Collections.emptyList();
+                // Invoke the mapper directly; it will throw IllegalArgumentException
+                return java.util.List.of(mapper.mapRow(rs, 1));
             });
 
-        chatMemoryStore.getMessages("session-1");
+        assertThrows(IllegalArgumentException.class, () -> chatMemoryStore.getMessages("session-1"));
     }
 
     @Test

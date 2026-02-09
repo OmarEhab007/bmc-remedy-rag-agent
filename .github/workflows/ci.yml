@@ -44,17 +44,15 @@ jobs:
 
       - name: Compile and install modules
         run: |
-          # Compile with errors allowed (remedy-connector model classes compile,
-          # BMC-dependent service classes fail silently). Skip tests and spring-boot repackage.
-          ./mvnw clean install -B \
-            -Dmaven.compiler.failOnError=false \
-            -DskipTests \
-            -Dspring-boot.repackage.skip=true
+          # Install non-BMC modules with strict compilation
+          ./mvnw clean install -B -pl '!remedy-connector' -DskipTests -Dspring-boot.repackage.skip=true
+          # Attempt remedy-connector (may fail with stub JAR)
+          ./mvnw install -B -pl remedy-connector -DskipTests -Dmaven.compiler.failOnError=false -Dspring-boot.repackage.skip=true || echo "remedy-connector partial compilation (BMC API stub)"
 
       - name: Run tests
         run: |
           # Run tests on all modules except remedy-connector
-          ./mvnw surefire:test -B -pl '!remedy-connector'
+          ./mvnw test -B -pl '!remedy-connector'
 
       - name: Upload test reports
         if: always()

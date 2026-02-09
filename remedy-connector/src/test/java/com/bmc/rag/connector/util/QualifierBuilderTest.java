@@ -295,43 +295,6 @@ class QualifierBuilderTest {
     }
 
     @Test
-    void parseQualification_nullString_buildsNullQualifier() {
-        // When - Test that null input produces null output
-        String result = null;
-        if (result == null || result.trim().isEmpty()) {
-            result = null;
-        }
-
-        // Then
-        assertThat(result).isNull();
-    }
-
-    @Test
-    void parseQualification_emptyString_buildsNullQualifier() {
-        // When - Test that empty input produces null output
-        String input = "   ";
-        String result = input;
-        if (result == null || result.trim().isEmpty()) {
-            result = null;
-        }
-
-        // Then
-        assertThat(result).isNull();
-    }
-
-    @Test
-    void parseQualification_validString_buildsQualifier() {
-        // When - Test that valid input produces expected format
-        String input = "'7' = 4";
-        String result = input;
-
-        // Then
-        assertThat(result).isEqualTo("'7' = 4");
-        assertThat(result).contains("'7'");
-        assertThat(result).contains("= 4");
-    }
-
-    @Test
     void reset_clearsConditions_allowsReuse() {
         // Given
         builder.equals(7, 4);

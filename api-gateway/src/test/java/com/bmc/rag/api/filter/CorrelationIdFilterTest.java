@@ -232,6 +232,83 @@ class CorrelationIdFilterTest {
     }
 
     @Nested
+    @DisplayName("Correlation ID Sanitization Tests")
+    class CorrelationIdSanitizationTests {
+
+        @Test
+        @DisplayName("doFilterInternal_crlfInjectionAttempt_generatesNewUuid")
+        void doFilterInternal_crlfInjectionAttempt_generatesNewUuid() throws ServletException, IOException {
+            // CRLF injection: attacker tries to inject a new header via \r\n
+            when(request.getHeader("X-Correlation-ID")).thenReturn("evil\r\nX-Injected: true");
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            verify(response).setHeader(eq("X-Correlation-ID"), captor.capture());
+
+            String correlationId = captor.getValue();
+            // Control chars stripped leaves "evilX-Injected: true" which has invalid chars (space, colon)
+            // so a UUID should be generated
+            assertThat(correlationId).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+        }
+
+        @Test
+        @DisplayName("doFilterInternal_specialCharsInCorrelationId_generatesNewUuid")
+        void doFilterInternal_specialCharsInCorrelationId_generatesNewUuid() throws ServletException, IOException {
+            when(request.getHeader("X-Correlation-ID")).thenReturn("id with spaces & symbols!");
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            verify(response).setHeader(eq("X-Correlation-ID"), captor.capture());
+
+            String correlationId = captor.getValue();
+            assertThat(correlationId).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+        }
+
+        @Test
+        @DisplayName("doFilterInternal_tooLongCorrelationId_truncatesTo64Chars")
+        void doFilterInternal_tooLongCorrelationId_truncatesTo64Chars() throws ServletException, IOException {
+            String longId = "a".repeat(100);
+            when(request.getHeader("X-Correlation-ID")).thenReturn(longId);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            verify(response).setHeader(eq("X-Correlation-ID"), captor.capture());
+
+            String correlationId = captor.getValue();
+            assertThat(correlationId).hasSize(64);
+            assertThat(correlationId).isEqualTo("a".repeat(64));
+        }
+
+        @Test
+        @DisplayName("doFilterInternal_validCorrelationIdWithAllowedChars_passesThrough")
+        void doFilterInternal_validCorrelationIdWithAllowedChars_passesThrough() throws ServletException, IOException {
+            String validId = "req-123_test.abc";
+            when(request.getHeader("X-Correlation-ID")).thenReturn(validId);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            verify(response).setHeader("X-Correlation-ID", validId);
+        }
+
+        @Test
+        @DisplayName("doFilterInternal_onlyControlChars_generatesNewUuid")
+        void doFilterInternal_onlyControlChars_generatesNewUuid() throws ServletException, IOException {
+            when(request.getHeader("X-Correlation-ID")).thenReturn("\r\n\t");
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            verify(response).setHeader(eq("X-Correlation-ID"), captor.capture());
+
+            String correlationId = captor.getValue();
+            assertThat(correlationId).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+        }
+    }
+
+    @Nested
     @DisplayName("Filter Chain Execution Tests")
     class FilterChainExecutionTests {
 
