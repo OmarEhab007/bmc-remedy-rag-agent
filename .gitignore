@@ -145,3 +145,28 @@ vector_store_remediation.sql
 claude.md
 .gitignore
 .cursorrules
+
+# ============================================================================
+# CST private data (never publish)
+# ============================================================================
+# Explicit local analysis/artifact files containing CST-specific operational data
+DOCS.md
+FIX_PLAN.md
+open-webui-*.png
+
+# Future CST/Damee/CITC data exports and notes (non-code artifacts only)
+**/*[Dd]amee*.md
+**/*[Dd]amee*.txt
+**/*[Dd]amee*.csv
+**/*[Dd]amee*.json
+**/*[Dd]amee*.sql
+**/*[Cc][Ss][Tt]*.md
+**/*[Cc][Ss][Tt]*.txt
+**/*[Cc][Ss][Tt]*.csv
+**/*[Cc][Ss][Tt]*.json
+**/*[Cc][Ss][Tt]*.sql
+**/*[Cc][Ii][Tt][Cc]*.md
+**/*[Cc][Ii][Tt][Cc]*.txt
+**/*[Cc][Ii][Tt][Cc]*.csv
+**/*[Cc][Ii][Tt][Cc]*.json
+**/*[Cc][Ii][Tt][Cc]*.sql

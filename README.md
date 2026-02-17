@@ -96,51 +96,70 @@ This agent transforms your historical ITSM data into an intelligent knowledge ba
 
 ## Architecture
 
-### System Overview
+### System Overview (Code-Validated)
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff'}}}%%
 graph TB
-    subgraph UI["🖥️ User Interface"]
-        Web["React 19 Web Chat<br/>TypeScript • Tailwind CSS<br/>English/Arabic • Dark/Light"]
+    subgraph UI["🖥️ Client Interfaces"]
+        Web["React Web Chat<br/>REST + STOMP WebSocket"]
+        OpenWebUI["Open WebUI / OpenAI-Compatible Clients"]
+        Teams["Microsoft Teams Bot (Optional)"]
     end
 
-    subgraph Gateway["🚪 API Gateway (Port 8080)"]
-        REST["REST Controllers"]
-        WS["WebSocket Streaming"]
-        Tools["Tool Server"]
-        OpenAI["OpenAI-Compatible API"]
-        Security["OAuth2/JWT • Rate Limiting"]
+    subgraph Gateway["🚪 api-gateway (Port 8080)"]
+        REST["REST Controllers<br/>Chat • Search • Feedback • Admin • Ingestion"]
+        WS["WebSocketChatController<br/>/ws-chat"]
+        OpenAI["OpenAiCompatibleController<br/>/v1/chat/completions"]
+        Tools["ToolServerController + ActionController"]
+        Security["Security + Filters<br/>JWT • RateLimit • Correlation ID"]
     end
 
-    subgraph Services["⚙️ Core Services"]
+    subgraph Services["⚙️ Runtime Services"]
         direction LR
-        RAG["RAG Service<br/>LangChain4j • ReBAC<br/>Chat Memory • Agentic Tools"]
-        VEC["Vectorization Engine<br/>ONNX Embeddings<br/>Semantic Chunking"]
+        RAG["RagAssistantService<br/>Streaming + Citations"]
+        RET["SecureContentRetriever<br/>QueryRewriter • ReBAC"]
+        AG["AgenticAssistantService<br/>RemedyIncidentTool • RemedyWorkOrderTool"]
+        CONF["ConfirmationService<br/>Stage/Confirm/Cancel"]
+        SYNC["IncrementalSyncService<br/>Scheduled + Manual Sync"]
+        RC["remedy-connector<br/>Extractors + Creators + ThreadLocalARContext"]
+        VEC["Chunking + Embeddings<br/>SemanticChunker • all-minilm-l6-v2"]
     end
 
     subgraph Storage["💾 Storage Layer"]
-        VS["Vector Store<br/>PostgreSQL + pgvector<br/>HNSW • Hybrid Search"]
+        VS["VectorStoreService<br/>Search/Store/Delete"]
+        DB["PostgreSQL + pgvector<br/>embedding_store • chat_memory<br/>sync_state • action_audit • feedback"]
     end
 
-    subgraph Data["📋 Data Sources"]
-        RC["Remedy Connector<br/>ThreadLocal Pool<br/>Field ID Queries"]
-        BMC["BMC Remedy AR System<br/>9.x - 20.x"]
-        LLM["LLM Engine<br/>Ollama / Z.AI"]
+    subgraph Data["📋 External Systems"]
+        BMC["BMC Remedy AR System<br/>HPD • WOI • CHG • RKM"]
+        LLM["LLM Provider<br/>Google AI / Z.AI / Ollama"]
     end
 
-    UI --> Gateway
+    Web --> REST
+    Web --> WS
+    OpenWebUI --> OpenAI
+    OpenWebUI --> Tools
+    Teams --> REST
+
     REST --> RAG
     WS --> RAG
-    Tools --> RAG
     OpenAI --> RAG
+    Tools --> AG
 
-    RAG --> VEC
+    RAG --> RET
     RAG --> VS
     RAG --> LLM
-    VEC --> VS
+    RET --> VS
 
-    VS --> RC
+    AG --> CONF
+    CONF --> RC
+
+    REST --> SYNC
+    SYNC --> RC
+    RC --> VEC
+    VEC --> VS
+    VS --> DB
     RC --> BMC
 
     classDef ui fill:#DBEAFE,stroke:#3B82F6,stroke-width:2px
@@ -149,11 +168,11 @@ graph TB
     classDef storage fill:#F3E8FF,stroke:#8B5CF6,stroke-width:2px
     classDef data fill:#FEE2E2,stroke:#EF4444,stroke-width:2px
 
-    class Web ui
+    class Web,OpenWebUI,Teams ui
     class REST,WS,Tools,OpenAI,Security gateway
-    class RAG,VEC services
-    class VS storage
-    class RC,BMC,LLM data
+    class RAG,RET,AG,CONF,SYNC,RC,VEC services
+    class VS,DB storage
+    class BMC,LLM data
 ```
 
 ### Request Flow
@@ -183,63 +202,61 @@ sequenceDiagram
 ### Text Diagram (Fallback)
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              USER INTERFACE                                  │
-│           React 19 • TypeScript • WebSocket • Tailwind CSS                   │
-│                    English/Arabic • Dark/Light Theme                         │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              API GATEWAY (Port 8080)                         │
-│  REST Controllers • WebSocket Streaming • Tool Server • OpenAI-Compatible   │
-│     Rate Limiting (Resilience4j + Bucket4j) • OAuth2/JWT Security           │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                    ┌─────────────────┴─────────────────┐
-                    ▼                                   ▼
-┌─────────────────────────────────┐   ┌─────────────────────────────────────┐
-│          RAG SERVICE            │   │       VECTORIZATION ENGINE          │
-│  • LangChain4j Orchestration    │   │  • ONNX Embeddings (all-minilm)     │
-│  • ReBAC Security Filtering     │   │  • Semantic Chunking Strategy       │
-│  • Chat Memory (PostgreSQL)     │   │  • Apache Tika (PDF/Word/Excel)     │
-│  • Agentic Tools (@Tool)        │   │  • Query Rewriting & Expansion      │
-│  • Confirmation Service         │   │  • Context Injection                │
-└─────────────────────────────────┘   └─────────────────────────────────────┘
-                    │                                   │
-                    └─────────────────┬─────────────────┘
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      VECTOR STORE (PostgreSQL + pgvector)                    │
-│     HNSW Indexing • Hybrid Search (RRF) • JSONB Metadata • Flyway           │
-│              Cosine Similarity • Full-Text Search • Action Audit            │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           REMEDY CONNECTOR                                   │
-│    ThreadLocal Connection Pool • Field ID Queries • Batch Pagination        │
-│      Incident Creator/Updater • Work Log Service • User Service             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        BMC REMEDY AR SYSTEM (9.x - 20.x)                     │
-│  HPD:Help Desk • HPD:WorkLog • WOI:WorkOrder • CHG:Infrastructure Change    │
-│                       RKM:KnowledgeArticleManager                            │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ CLIENTS                                                                                        │
+│ React Web Chat • OpenAI-compatible clients (Open WebUI) • Teams bot integration (optional)    │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                             │
+                                             ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ API-GATEWAY (:8080)                                                                            │
+│ ChatController • WebSocketChatController • OpenAiCompatibleController • ToolServerController  │
+│ ActionController • IngestionController • Feedback/Admin/Health                                 │
+│ SecurityConfig + RateLimitFilter + CorrelationIdFilter                                         │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
+         │                                    │                                     │
+         │  A) Query / chat path              │  B) Agentic write path              │  C) Sync / ingestion path
+         ▼                                    ▼                                     ▼
+┌──────────────────────────────┐  ┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ rag-service                  │  │ rag-service                  │  │ vector-store                 │
+│ RagAssistantService          │  │ AgenticAssistantService      │  │ IncrementalSyncService       │
+│ SecureContentRetriever       │  │ RemedyIncidentTool/@Tool     │  │ (@Scheduled + admin trigger) │
+│ QueryRewriter + Arabic proc  │  │ RemedyWorkOrderTool/@Tool    │  └───────────────┬──────────────┘
+│ PostgresChatMemoryStore      │  │ ConfirmationService (TTL)     │                  │
+│ LLM generation/streaming     │  └───────────────┬──────────────┘                  ▼
+└───────────────┬──────────────┘                  │                    ┌──────────────────────────────┐
+                │                                 │                    │ remedy-connector             │
+                ▼                                 ▼                    │ Extractors (INC/WO/KB/CR/WL) │
+┌────────────────────────────────────────────────────────────────────┐ │ Creators/Updater + AR context│
+│ vector-store + vectorization-engine                                │ └───────────────┬──────────────┘
+│ VectorStoreService search/store/delete                             │                 │
+│ Chunk strategies + SemanticChunker + LocalEmbeddingService (384d)  │                 ▼
+└───────────────┬────────────────────────────────────────────────────┘ ┌──────────────────────────────┐
+                ▼                                                      │ BMC Remedy AR System         │
+┌────────────────────────────────────────────────────────────────────┐ │ HPD • WOI • CHG • RKM forms │
+│ PostgreSQL + pgvector                                              │ └──────────────────────────────┘
+│ embedding_store (HNSW + JSONB/ReBAC + FTS)                         │
+│ sync_state • chat_memory/chat_history • action_audit • feedback    │
+└────────────────────────────────────────────────────────────────────┘
+
+External LLM path (from `RagAssistantService`):
+┌────────────────────────────────────────────────────────────────────┐
+│ LLM Provider                                                       │
+│ Google AI / Z.AI / (optional local Ollama profile)                │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Module Structure
 
 | Module | Purpose | Key Components |
 |--------|---------|----------------|
-| `remedy-connector` | Native BMC AR API integration | ThreadLocalARContext, IncidentCreator, WorkLogService |
-| `vectorization-engine` | Local embedding generation and content chunking | LocalEmbeddingService, SemanticChunker, AttachmentParser |
-| `vector-store` | PostgreSQL + pgvector with Flyway migrations | VectorStoreService, HybridSearchService, IncrementalSyncService |
-| `rag-service` | LangChain4j orchestration, ReBAC, and chat memory | RagAssistantService, ConfirmationService, AgenticRateLimiter |
-| `api-gateway` | REST/WebSocket APIs and Spring Boot bootstrap | ChatController, ToolServerController, OpenAiCompatibleController |
-| `frontend/web-chat` | React 19 + TypeScript + Tailwind CSS interface | Chat, Citations, ServiceCatalog, i18n |
+| `remedy-connector` | Native BMC AR Java API integration for extraction and write operations | ThreadLocalARContext, Incident/WO/KB/CR Extractors, IncidentCreator, IncidentUpdater, WorkOrderCreator |
+| `vectorization-engine` | ITSM-aware chunking and local embedding generation | SemanticChunker, Incident/WO/KB/CR Chunk Strategies, LocalEmbeddingService, AttachmentParser |
+| `vector-store` | Persistence, retrieval, and synchronization orchestration | VectorStoreService, IncrementalSyncService, EmbeddingRepository, HybridSearchService, EmbeddingRefreshService |
+| `rag-service` | Retrieval orchestration, memory, security filtering, and agentic confirmation flow | RagAssistantService, SecureContentRetriever, AgenticAssistantService, ConfirmationService, PostgresChatMemoryStore |
+| `api-gateway` | Single Spring Boot runtime exposing REST/WebSocket/OpenAI-compatible APIs | BmcRemedyRagApplication, ChatController, OpenAiCompatibleController, ToolServerController, IngestionController |
+| `frontend/web-chat` | Real-time chat interface for internal users | `useWebSocket`, ChatMain, MessageBubble, CitationBlock, i18n |
+| `open-webui-tools` | Python tool adapters and orchestration pipe for Open WebUI | `bmc_remedy_incidents.py`, `bmc_knowledge_search.py`, `it_support_agent_pipe.py` |
 
 ---
 
@@ -868,4 +885,3 @@ Proprietary — Copyright 2025-2026. All rights reserved.
 - **[Ollama](https://ollama.com)** — Local LLM runtime
 - **[Apache Tika](https://tika.apache.org)** — Document content extraction
 - **BMC Software** — AR System Java API
-
